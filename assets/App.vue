@@ -148,6 +148,12 @@
         @click.stop.prevent
       ></div>
       <ul v-if="typeof focusedItem === 'string'" class="contextmenu-list">
+        <!-- 【新增】1. 在这里添加下载文件夹按钮 -->
+        <li>
+          <button @click="downloadFolder">
+            <span>下载文件夹</span>
+          </button>
+        </li>
         <li>
           <button @click="copyLink(`/?p=${encodeURIComponent(focusedItem)}`)">
             <span>复制链接</span>
@@ -281,6 +287,15 @@ export default {
           .catch(() => {});
         console.log(`Create folder failed`);
       }
+    },
+
+    // 【新增】2. 在这里添加下载文件夹功能的函数
+    downloadFolder() {
+      if (typeof this.focusedItem === 'string') {
+        const folderPath = this.focusedItem;
+        window.open(`/api/download/folder/${folderPath}`);
+      }
+      this.showContextMenu = false;
     },
 
     fetchFiles() {
