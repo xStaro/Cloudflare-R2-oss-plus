@@ -1,4 +1,6 @@
 <script setup>
+import { ref, onMounted, onUnmounted } from 'vue';
+
 const props = defineProps({
   viewMode: {
     type: String,
@@ -27,6 +29,10 @@ const props = defineProps({
   isReadonly: {
     type: Boolean,
     default: false
+  },
+  refreshing: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -40,14 +46,36 @@ const emit = defineEmits([
   'refresh'
 ]);
 
-function toggleSort(field) {
-  if (field === emit.sortBy) {
-    emit('update:sortOrder', emit.sortOrder === 'asc' ? 'desc' : 'asc');
-  } else {
-    emit('update:sortBy', field);
-    emit('update:sortOrder', 'asc');
+const showSortMenu = ref(false);
+const sortDropdownRef = ref(null);
+
+function toggleSortMenu() {
+  showSortMenu.value = !showSortMenu.value;
+}
+
+function selectSort(field) {
+  emit('update:sortBy', field);
+  showSortMenu.value = false;
+}
+
+function toggleSortOrder() {
+  emit('update:sortOrder', props.sortOrder === 'asc' ? 'desc' : 'asc');
+  showSortMenu.value = false;
+}
+
+function handleClickOutside(e) {
+  if (sortDropdownRef.value && !sortDropdownRef.value.contains(e.target)) {
+    showSortMenu.value = false;
   }
 }
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside);
+});
 </script>
 
 <template>
@@ -89,8 +117,8 @@ function toggleSort(field) {
       <div class="toolbar-divider"></div>
 
       <!-- Sort Dropdown -->
-      <div class="sort-dropdown">
-        <button class="toolbar-btn" title="排序">
+      <div class="sort-dropdown" ref="sortDropdownRef">
+        <button class="toolbar-btn" @click.stop="toggleSortMenu" title="排序">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="4" y1="6" x2="16" y2="6"/>
             <line x1="4" y1="12" x2="12" y2="12"/>
@@ -99,57 +127,59 @@ function toggleSort(field) {
             <line x1="18" y1="9" x2="18" y2="18"/>
           </svg>
         </button>
-        <div class="dropdown-menu">
-          <button
-            class="dropdown-item"
-            :class="{ active: sortBy === 'name' }"
-            @click="emit('update:sortBy', 'name')"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M4 6h16M4 12h10M4 18h4"/>
-            </svg>
-            名称
-          </button>
-          <button
-            class="dropdown-item"
-            :class="{ active: sortBy === 'size' }"
-            @click="emit('update:sortBy', 'size')"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <path d="M14 2v6h6"/>
-            </svg>
-            大小
-          </button>
-          <button
-            class="dropdown-item"
-            :class="{ active: sortBy === 'date' }"
-            @click="emit('update:sortBy', 'date')"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-            日期
-          </button>
-          <div class="dropdown-divider"></div>
-          <button
-            class="dropdown-item"
-            @click="emit('update:sortOrder', sortOrder === 'asc' ? 'desc' : 'asc')"
-          >
-            <svg v-if="sortOrder === 'asc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="19" x2="12" y2="5"/>
-              <polyline points="5 12 12 5 19 12"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <polyline points="19 12 12 19 5 12"/>
-            </svg>
-            {{ sortOrder === 'asc' ? '升序' : '降序' }}
-          </button>
-        </div>
+        <Transition name="dropdown">
+          <div v-if="showSortMenu" class="dropdown-menu">
+            <button
+              class="dropdown-item"
+              :class="{ active: sortBy === 'name' }"
+              @click="selectSort('name')"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 6h16M4 12h10M4 18h4"/>
+              </svg>
+              名称
+            </button>
+            <button
+              class="dropdown-item"
+              :class="{ active: sortBy === 'size' }"
+              @click="selectSort('size')"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <path d="M14 2v6h6"/>
+              </svg>
+              大小
+            </button>
+            <button
+              class="dropdown-item"
+              :class="{ active: sortBy === 'date' }"
+              @click="selectSort('date')"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              日期
+            </button>
+            <div class="dropdown-divider"></div>
+            <button
+              class="dropdown-item"
+              @click="toggleSortOrder"
+            >
+              <svg v-if="sortOrder === 'asc'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="19" x2="12" y2="5"/>
+                <polyline points="5 12 12 5 19 12"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <polyline points="19 12 12 19 5 12"/>
+              </svg>
+              {{ sortOrder === 'asc' ? '升序' : '降序' }}
+            </button>
+          </div>
+        </Transition>
       </div>
 
       <!-- View Mode Toggle -->
@@ -202,6 +232,7 @@ function toggleSort(field) {
       <!-- Refresh -->
       <button
         class="toolbar-btn"
+        :class="{ refreshing: refreshing }"
         @click="emit('refresh')"
         title="刷新"
       >
@@ -295,17 +326,18 @@ function toggleSort(field) {
   min-width: 140px;
   padding: 6px;
   z-index: 100;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-8px);
+}
+
+/* Dropdown Animation */
+.dropdown-enter-active,
+.dropdown-leave-active {
   transition: all 0.2s ease;
 }
 
-.sort-dropdown:hover .dropdown-menu,
-.sort-dropdown:focus-within .dropdown-menu {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 .dropdown-item {
@@ -343,6 +375,16 @@ function toggleSort(field) {
   height: 1px;
   background: var(--divider-color);
   margin: 6px 0;
+}
+
+/* Refresh Animation */
+.toolbar-btn.refreshing svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* Mobile */

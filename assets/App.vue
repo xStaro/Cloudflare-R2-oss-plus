@@ -31,13 +31,14 @@
         :selectedCount="selectedItems.length"
         :totalCount="filteredFiles.length + filteredFolders.length"
         :isReadonly="isReadonly"
+        :refreshing="refreshing"
         @update:viewMode="viewMode = $event"
         @update:sortBy="sortBy = $event"
         @update:sortOrder="sortOrder = $event"
         @toggleSelection="selectionMode = !selectionMode"
         @selectAll="selectAll"
         @createFolder="createFolder"
-        @refresh="fetchFiles"
+        @refresh="handleRefresh"
       >
         <template #breadcrumb>
           <Breadcrumb :path="cwd" @navigate="navigateTo" />
@@ -256,6 +257,9 @@
         </div>
       </div>
     </Dialog>
+
+    <!-- Toast -->
+    <Toast ref="toast" />
   </div>
 </template>
 
@@ -277,6 +281,7 @@ import UploadPopup from "./UploadPopup.vue";
 import LoginDialog from "./LoginDialog.vue";
 import ShareDialog from "./ShareDialog.vue";
 import InputDialog from "./InputDialog.vue";
+import Toast from "./Toast.vue";
 
 export default {
   data: () => ({
@@ -290,6 +295,7 @@ export default {
     files: [],
     folders: [],
     loading: false,
+    refreshing: false,
 
     // Search & Sort
     search: "",
@@ -697,6 +703,7 @@ export default {
     copyLink(link) {
       const url = new URL(link, window.location.origin);
       navigator.clipboard.writeText(url.toString());
+      this.$refs.toast?.success('链接已复制');
       this.showContextMenu = false;
     },
 
@@ -762,11 +769,18 @@ export default {
       });
     },
 
+    async handleRefresh() {
+      this.refreshing = true;
+      await this.fetchFiles();
+      this.$refs.toast?.success('刷新成功');
+      this.refreshing = false;
+    },
+
     fetchFiles() {
       this.files = [];
       this.folders = [];
       this.loading = true;
-      fetch(`/api/children/${this.cwd}`)
+      return fetch(`/api/children/${this.cwd}`)
         .then((res) => {
           if (!res.ok) throw new Error('获取文件列表失败');
           return res.json();
@@ -1136,6 +1150,7 @@ export default {
     LoginDialog,
     ShareDialog,
     InputDialog,
+    Toast,
   },
 };
 </script>
