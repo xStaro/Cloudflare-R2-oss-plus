@@ -1,114 +1,3 @@
-<script setup>
-import { computed } from 'vue';
-
-const props = defineProps({
-  file: {
-    type: Object,
-    required: true
-  },
-  selected: {
-    type: Boolean,
-    default: false
-  },
-  selectionMode: {
-    type: Boolean,
-    default: false
-  },
-  viewMode: {
-    type: String,
-    default: 'grid'
-  }
-});
-
-const emit = defineEmits(['click', 'select', 'contextmenu', 'preview']);
-
-// 是否是文件夹
-const isFolder = computed(() => props.file.key?.endsWith('_$folder$') || props.file.isFolder);
-
-// 文件名
-const fileName = computed(() => {
-  if (isFolder.value) {
-    return props.file.key?.replace('_$folder$', '').split('/').filter(Boolean).pop() || props.file.name;
-  }
-  return props.file.key?.split('/').pop() || props.file.name;
-});
-
-// 格式化文件大小
-function formatSize(bytes) {
-  if (bytes === 0 || bytes === undefined) return '-';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-// 格式化日期
-function formatDate(dateString) {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-// 获取文件类型图标
-const fileIcon = computed(() => {
-  if (isFolder.value) return 'folder';
-
-  const ext = fileName.value.split('.').pop()?.toLowerCase();
-  const contentType = props.file.httpMetadata?.contentType || '';
-
-  if (contentType.startsWith('image/')) return 'image';
-  if (contentType.startsWith('video/')) return 'video';
-  if (contentType.startsWith('audio/')) return 'audio';
-  if (contentType.startsWith('text/') || ['txt', 'md', 'json', 'xml', 'html', 'css', 'js', 'ts'].includes(ext)) return 'text';
-  if (['pdf'].includes(ext)) return 'pdf';
-  if (['doc', 'docx'].includes(ext)) return 'word';
-  if (['xls', 'xlsx'].includes(ext)) return 'excel';
-  if (['ppt', 'pptx'].includes(ext)) return 'ppt';
-  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return 'archive';
-
-  return 'file';
-});
-
-// 是否可预览
-const canPreview = computed(() => {
-  const contentType = props.file.httpMetadata?.contentType || '';
-  return contentType.startsWith('image/') || contentType.startsWith('video/');
-});
-
-// 缩略图URL
-const thumbnailUrl = computed(() => {
-  if (!canPreview.value) return null;
-  const contentType = props.file.httpMetadata?.contentType || '';
-  if (contentType.startsWith('image/')) {
-    return `/file/${props.file.key}`;
-  }
-  return null;
-});
-
-function handleClick(e) {
-  if (props.selectionMode) {
-    emit('select', props.file);
-  } else {
-    emit('click', props.file);
-  }
-}
-
-function handleCheckbox(e) {
-  e.stopPropagation();
-  emit('select', props.file);
-}
-
-function handleContextMenu(e) {
-  e.preventDefault();
-  emit('contextmenu', e, props.file);
-}
-</script>
-
 <template>
   <!-- Grid View Card -->
   <div
@@ -236,6 +125,106 @@ function handleContextMenu(e) {
     </div>
   </div>
 </template>
+
+<script>
+export default {
+  name: 'FileCard',
+  props: {
+    file: {
+      type: Object,
+      required: true
+    },
+    selected: {
+      type: Boolean,
+      default: false
+    },
+    selectionMode: {
+      type: Boolean,
+      default: false
+    },
+    viewMode: {
+      type: String,
+      default: 'grid'
+    }
+  },
+  emits: ['click', 'select', 'contextmenu', 'preview'],
+  computed: {
+    isFolder() {
+      return this.file.key?.endsWith('_$folder$') || this.file.isFolder;
+    },
+    fileName() {
+      if (this.isFolder) {
+        return this.file.key?.replace('_$folder$', '').split('/').filter(Boolean).pop() || this.file.name || '';
+      }
+      return this.file.key?.split('/').pop() || this.file.name || '';
+    },
+    fileIcon() {
+      if (this.isFolder) return 'folder';
+
+      const ext = (this.fileName || '').split('.').pop()?.toLowerCase() || '';
+      const contentType = this.file.httpMetadata?.contentType || '';
+
+      if (contentType.startsWith('image/')) return 'image';
+      if (contentType.startsWith('video/')) return 'video';
+      if (contentType.startsWith('audio/')) return 'audio';
+      if (contentType.startsWith('text/') || ['txt', 'md', 'json', 'xml', 'html', 'css', 'js', 'ts'].includes(ext)) return 'text';
+      if (['pdf'].includes(ext)) return 'pdf';
+      if (['doc', 'docx'].includes(ext)) return 'word';
+      if (['xls', 'xlsx'].includes(ext)) return 'excel';
+      if (['ppt', 'pptx'].includes(ext)) return 'ppt';
+      if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return 'archive';
+
+      return 'file';
+    },
+    canPreview() {
+      const contentType = this.file.httpMetadata?.contentType || '';
+      return contentType.startsWith('image/') || contentType.startsWith('video/');
+    },
+    thumbnailUrl() {
+      if (!this.canPreview) return null;
+      const contentType = this.file.httpMetadata?.contentType || '';
+      if (contentType.startsWith('image/')) {
+        return `/file/${this.file.key}`;
+      }
+      return null;
+    }
+  },
+  methods: {
+    formatSize(bytes) {
+      if (bytes === 0 || bytes === undefined) return '-';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    },
+    formatDate(dateString) {
+      if (!dateString) return '-';
+      const date = new Date(dateString);
+      return date.toLocaleDateString('zh-CN', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    },
+    handleClick(e) {
+      if (this.selectionMode) {
+        this.$emit('select', this.file);
+      } else {
+        this.$emit('click', this.file);
+      }
+    },
+    handleCheckbox(e) {
+      e.stopPropagation();
+      this.$emit('select', this.file);
+    },
+    handleContextMenu(e) {
+      e.preventDefault();
+      this.$emit('contextmenu', e, this.file);
+    }
+  }
+};
+</script>
 
 <style scoped>
 /* Grid Card Styles */
