@@ -19,8 +19,8 @@
 
     <!-- Main Content -->
     <main class="main-content">
-      <!-- Stats Cards -->
-      <StatsCards ref="statsCards" />
+      <!-- Stats Cards (仅登录用户可见) -->
+      <StatsCards v-if="showStats" ref="statsCards" />
 
       <!-- Toolbar -->
       <Toolbar
@@ -402,6 +402,10 @@ export default {
     },
     isReadonly() {
       return this.currentUser?.isReadonly === true;
+    },
+    // 是否显示统计卡片（访客不显示）
+    showStats() {
+      return this.currentUser && !this.currentUser.isGuest;
     },
   },
 
