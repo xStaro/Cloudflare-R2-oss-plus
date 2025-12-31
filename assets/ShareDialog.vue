@@ -217,9 +217,16 @@ export default {
           maxDownloads: this.enableDownloadLimit ? this.maxDownloads : undefined
         };
 
+        // 获取认证信息
+        const credentials = localStorage.getItem('auth_credentials');
+        const headers = { 'Content-Type': 'application/json' };
+        if (credentials) {
+          headers['Authorization'] = `Basic ${credentials}`;
+        }
+
         const response = await fetch('/api/share/create', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(body)
         });
 
@@ -421,10 +428,12 @@ export default {
   cursor: pointer;
   accent-color: var(--primary-color);
   flex-shrink: 0;
+  vertical-align: middle;
 }
 
 .checkbox-label span {
-  line-height: 1;
+  line-height: 18px;
+  vertical-align: middle;
 }
 
 .password-input,
