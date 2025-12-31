@@ -491,7 +491,7 @@ function handleSwitchAccount() {
 .dropdown-overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 99;
 }
 
 /* Dropdown Animation */
