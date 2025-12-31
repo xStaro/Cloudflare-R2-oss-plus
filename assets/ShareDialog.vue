@@ -407,16 +407,24 @@ export default {
 }
 
 .checkbox-label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   cursor: pointer;
+  user-select: none;
 }
 
 .checkbox-label input[type="checkbox"] {
   width: 18px;
   height: 18px;
+  margin: 0;
   cursor: pointer;
+  accent-color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.checkbox-label span {
+  line-height: 1;
 }
 
 .password-input,

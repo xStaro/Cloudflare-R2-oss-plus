@@ -13,10 +13,10 @@ interface Env {
 }
 
 // 验证用户是否有写入权限
-function checkWritePermission(context: any): boolean {
+function checkWritePermission(context: any): { allowed: boolean; username: string } {
   const headers = new Headers(context.request.headers);
   const authHeader = headers.get('Authorization');
-  if (!authHeader) return false;
+  if (!authHeader) return { allowed: false, username: '' };
 
   try {
     const base64 = authHeader.split("Basic ")[1];
@@ -26,44 +26,33 @@ function checkWritePermission(context: any): boolean {
       bytes[i] = binaryStr.charCodeAt(i);
     }
     const account = new TextDecoder().decode(bytes);
-    if (!account) return false;
+    if (!account) return { allowed: false, username: '' };
+
+    const username = account.split(':')[0] || '';
 
     // 检查用户权限
     const userPerms = context.env[account];
-    if (!userPerms) return false;
+    if (!userPerms) return { allowed: false, username };
+
+    // 解析权限列表
+    const permissions = userPerms.split(',').map((p: string) => p.trim());
 
     // 检查是否是只读用户
-    if (userPerms === 'readonly') return false;
-
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// 获取用户名
-function getUsername(context: any): string {
-  const headers = new Headers(context.request.headers);
-  const authHeader = headers.get('Authorization');
-  if (!authHeader) return 'anonymous';
-
-  try {
-    const base64 = authHeader.split("Basic ")[1];
-    const binaryStr = atob(base64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
+    if (permissions.includes('readonly')) {
+      return { allowed: false, username };
     }
-    const account = new TextDecoder().decode(bytes);
-    return account.split(':')[0] || 'anonymous';
+
+    // 管理员或有任何写权限的用户都可以创建分享
+    return { allowed: true, username };
   } catch {
-    return 'anonymous';
+    return { allowed: false, username: '' };
   }
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   // 检查权限
-  if (!checkWritePermission(context)) {
+  const { allowed, username } = checkWritePermission(context);
+  if (!allowed) {
     return new Response(JSON.stringify({ error: '没有权限创建分享' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' }
@@ -112,7 +101,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       createdAt: Date.now(),
       expiresAt: expiresAt,
       downloads: 0,
-      createdBy: getUsername(context)
+      createdBy: username || 'anonymous'
     };
 
     // 添加可选字段

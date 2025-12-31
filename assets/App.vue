@@ -151,6 +151,19 @@
       @close="showShareDialog = false"
     />
 
+    <!-- Input Dialog -->
+    <InputDialog
+      v-model="showInputDialog"
+      :title="inputDialogConfig.title"
+      :description="inputDialogConfig.description"
+      :placeholder="inputDialogConfig.placeholder"
+      :hint="inputDialogConfig.hint"
+      :defaultValue="inputDialogConfig.defaultValue"
+      :confirmText="inputDialogConfig.confirmText"
+      :icon="inputDialogConfig.icon"
+      @confirm="handleInputConfirm"
+    />
+
     <!-- Context Menu Dialog -->
     <Dialog v-model="showContextMenu">
       <div class="context-menu">
@@ -263,6 +276,7 @@ import BatchBar from "./BatchBar.vue";
 import UploadPopup from "./UploadPopup.vue";
 import LoginDialog from "./LoginDialog.vue";
 import ShareDialog from "./ShareDialog.vue";
+import InputDialog from "./InputDialog.vue";
 
 export default {
   data: () => ({
@@ -312,6 +326,19 @@ export default {
     // Share
     showShareDialog: false,
     shareFileKey: '',
+
+    // Input Dialog
+    showInputDialog: false,
+    inputDialogConfig: {
+      title: '',
+      description: '',
+      placeholder: '',
+      hint: '',
+      defaultValue: '',
+      confirmText: '确定',
+      icon: '',
+      callback: null,
+    },
   }),
 
   computed: {
@@ -620,30 +647,38 @@ export default {
       }
     },
 
-    async batchMove() {
+    batchMove() {
       if (!this.selectedItems.length) return;
 
-      const targetPath = window.prompt('请输入目标路径（留空表示根目录）:', '');
-      if (targetPath === null) return;
+      this.showInput({
+        title: '批量移动',
+        description: `将选中的 ${this.selectedItems.length} 个项目移动到`,
+        placeholder: '请输入目标路径',
+        hint: '留空表示移动到根目录',
+        defaultValue: '',
+        icon: 'move',
+        confirmText: '移动',
+        callback: async (targetPath) => {
+          const normalizedPath = targetPath === '' ? '' : (targetPath.endsWith('/') ? targetPath : targetPath + '/');
 
-      const normalizedPath = targetPath === '' ? '' : (targetPath.endsWith('/') ? targetPath : targetPath + '/');
-
-      this.batchLoading = true;
-      try {
-        for (const key of this.selectedItems) {
-          const fileName = key.split('/').pop();
-          const targetFilePath = normalizedPath + fileName;
-          await this.copyPaste(key, targetFilePath);
-          await axios.delete(`/api/write/items/${key}`);
+          this.batchLoading = true;
+          try {
+            for (const key of this.selectedItems) {
+              const fileName = key.split('/').pop();
+              const targetFilePath = normalizedPath + fileName;
+              await this.copyPaste(key, targetFilePath);
+              await axios.delete(`/api/write/items/${key}`);
+            }
+            this.clearSelection();
+            this.fetchFiles();
+          } catch (error) {
+            console.error('Batch move failed:', error);
+            alert('批量移动失败');
+          } finally {
+            this.batchLoading = false;
+          }
         }
-        this.clearSelection();
-        this.fetchFiles();
-      } catch (error) {
-        console.error('Batch move failed:', error);
-        alert('批量移动失败');
-      } finally {
-        this.batchLoading = false;
-      }
+      });
     },
 
     // Context Menu
@@ -664,6 +699,27 @@ export default {
       this.showContextMenu = false;
     },
 
+    // Input Dialog Helper
+    showInput(config) {
+      this.inputDialogConfig = {
+        title: config.title || '输入',
+        description: config.description || '',
+        placeholder: config.placeholder || '请输入...',
+        hint: config.hint || '',
+        defaultValue: config.defaultValue || '',
+        confirmText: config.confirmText || '确定',
+        icon: config.icon || '',
+        callback: config.callback || null,
+      };
+      this.showInputDialog = true;
+    },
+
+    handleInputConfirm(value) {
+      if (this.inputDialogConfig.callback) {
+        this.inputDialogConfig.callback(value);
+      }
+    },
+
     async copyPaste(source, target) {
       const uploadUrl = `/api/write/items/${target}`;
       await axios.put(uploadUrl, "", {
@@ -671,23 +727,32 @@ export default {
       });
     },
 
-    async createFolder() {
-      try {
-        const folderName = window.prompt("请输入文件夹名称");
-        if (!folderName) return;
-        this.showUploadPopup = false;
-        const uploadUrl = `/api/write/items/${this.cwd}${folderName}/_$folder$`;
-        await axios.put(uploadUrl, "");
-        this.fetchFiles();
-        this.$refs.statsCards?.refresh();
-      } catch (error) {
-        fetch("/api/write/")
-          .then((value) => {
-            if (value.redirected) window.location.href = value.url;
-          })
-          .catch(() => {});
-        console.log(`Create folder failed`);
-      }
+    createFolder() {
+      this.showUploadPopup = false;
+      this.showInput({
+        title: '新建文件夹',
+        description: '创建一个新的文件夹',
+        placeholder: '请输入文件夹名称',
+        hint: '文件夹名称不能包含特殊字符',
+        icon: 'folder',
+        confirmText: '创建',
+        callback: async (folderName) => {
+          if (!folderName) return;
+          try {
+            const uploadUrl = `/api/write/items/${this.cwd}${folderName}/_$folder$`;
+            await axios.put(uploadUrl, "");
+            this.fetchFiles();
+            this.$refs.statsCards?.refresh();
+          } catch (error) {
+            fetch("/api/write/")
+              .then((value) => {
+                if (value.redirected) window.location.href = value.url;
+              })
+              .catch(() => {});
+            console.log(`Create folder failed`);
+          }
+        }
+      });
     },
 
     fetchFiles() {
@@ -803,62 +868,87 @@ export default {
       this.$refs.statsCards?.refresh();
     },
 
-    async renameFile(key) {
-      const newName = window.prompt("重命名为:");
-      if (!newName) return;
+    renameFile(key) {
+      const currentName = key.split('/').pop();
       this.showContextMenu = false;
-      await this.copyPaste(key, `${this.cwd}${newName}`);
-      await axios.delete(`/api/write/items/${key}`);
-      this.fetchFiles();
+      this.showInput({
+        title: '重命名',
+        description: `将 "${currentName}" 重命名为`,
+        placeholder: '请输入新名称',
+        defaultValue: currentName,
+        icon: 'rename',
+        confirmText: '重命名',
+        callback: async (newName) => {
+          if (!newName || newName === currentName) return;
+          try {
+            await this.copyPaste(key, `${this.cwd}${newName}`);
+            await axios.delete(`/api/write/items/${key}`);
+            this.fetchFiles();
+          } catch (error) {
+            console.error('Rename failed:', error);
+            alert('重命名失败');
+          }
+        }
+      });
     },
 
-    async moveFile(key) {
-      const targetPath = window.prompt('请输入目标路径（留空表示根目录）:', '');
-      if (targetPath === null) return;
+    moveFile(key) {
+      const fileName = key.split('/').pop();
+      const displayName = fileName.endsWith('_$folder$') ? fileName.slice(0, -9) : fileName;
       this.showContextMenu = false;
 
-      const normalizedPath = targetPath === '' ? '' : (targetPath.endsWith('/') ? targetPath : targetPath + '/');
-      const fileName = key.split('/').pop();
-      const finalFileName = fileName.endsWith('_$folder$') ? fileName.slice(0, -9) : fileName;
+      this.showInput({
+        title: '移动文件',
+        description: `将 "${displayName}" 移动到`,
+        placeholder: '请输入目标路径',
+        hint: '留空表示移动到根目录',
+        defaultValue: '',
+        icon: 'move',
+        confirmText: '移动',
+        callback: async (targetPath) => {
+          const normalizedPath = targetPath === '' ? '' : (targetPath.endsWith('/') ? targetPath : targetPath + '/');
+          const finalFileName = fileName.endsWith('_$folder$') ? fileName.slice(0, -9) : fileName;
 
-      try {
-        if (key.endsWith('_$folder$')) {
-          const sourceBasePath = key.slice(0, -9);
-          const targetBasePath = normalizedPath + finalFileName + '/';
+          try {
+            if (key.endsWith('_$folder$')) {
+              const sourceBasePath = key.slice(0, -9);
+              const targetBasePath = normalizedPath + finalFileName + '/';
 
-          const allItems = await this.getAllItems(sourceBasePath);
-          const totalItems = allItems.length;
-          let processedItems = 0;
+              const allItems = await this.getAllItems(sourceBasePath);
+              const totalItems = allItems.length;
+              let processedItems = 0;
 
-          for (const item of allItems) {
-            const relativePath = item.key.substring(sourceBasePath.length);
-            const newPath = targetBasePath + relativePath;
+              for (const item of allItems) {
+                const relativePath = item.key.substring(sourceBasePath.length);
+                const newPath = targetBasePath + relativePath;
 
-            try {
-              await this.copyPaste(item.key, newPath);
-              await axios.delete(`/api/write/items/${item.key}`);
-              processedItems++;
-              this.uploadProgress = (processedItems / totalItems) * 100;
-            } catch (error) {
-              console.error(`移动 ${item.key} 失败:`, error);
+                try {
+                  await this.copyPaste(item.key, newPath);
+                  await axios.delete(`/api/write/items/${item.key}`);
+                  processedItems++;
+                  this.uploadProgress = (processedItems / totalItems) * 100;
+                } catch (error) {
+                  console.error(`移动 ${item.key} 失败:`, error);
+                }
+              }
+
+              const targetFolderPath = targetBasePath.slice(0, -1) + '_$folder$';
+              await this.copyPaste(key, targetFolderPath);
+              await axios.delete(`/api/write/items/${key}`);
+              this.uploadProgress = null;
+            } else {
+              const targetFilePath = normalizedPath + finalFileName;
+              await this.copyPaste(key, targetFilePath);
+              await axios.delete(`/api/write/items/${key}`);
             }
+
+            this.fetchFiles();
+          } catch (error) {
+            console.error('移动失败:', error);
+            alert('移动失败,请检查目标路径是否正确');
           }
-
-          const targetFolderPath = targetBasePath.slice(0, -1) + '_$folder$';
-          await this.copyPaste(key, targetFolderPath);
-          await axios.delete(`/api/write/items/${key}`);
-          this.uploadProgress = null;
-        } else {
-          const targetFilePath = normalizedPath + finalFileName;
-          await this.copyPaste(key, targetFilePath);
-          await axios.delete(`/api/write/items/${key}`);
         }
-
-        this.fetchFiles();
-      } catch (error) {
-        console.error('移动失败:', error);
-        alert('移动失败,请检查目标路径是否正确');
-      }
+      });
     },
 
     async downloadFolder(folderPath) {
@@ -1004,6 +1094,7 @@ export default {
     UploadPopup,
     LoginDialog,
     ShareDialog,
+    InputDialog,
   },
 };
 </script>
