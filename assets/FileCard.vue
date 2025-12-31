@@ -145,6 +145,10 @@ export default {
     viewMode: {
       type: String,
       default: 'grid'
+    },
+    fileBaseUrl: {
+      type: String,
+      default: ''
     }
   },
   emits: ['click', 'select', 'contextmenu', 'preview'],
@@ -184,7 +188,11 @@ export default {
       if (!this.canPreview) return null;
       const contentType = this.file.httpMetadata?.contentType || '';
       if (contentType.startsWith('image/')) {
-        return `/file/${this.file.key}`;
+        // 如果配置了 CDN 回源地址，使用 CDN；否则使用 /raw/ 路由
+        if (this.fileBaseUrl) {
+          return `${this.fileBaseUrl}/${this.file.key}`;
+        }
+        return `/raw/${this.file.key}`;
       }
       return null;
     }

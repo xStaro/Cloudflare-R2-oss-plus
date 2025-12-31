@@ -99,6 +99,7 @@
           :viewMode="viewMode"
           :selected="isSelected(file.key)"
           :selectionMode="selectionMode"
+          :fileBaseUrl="fileBaseUrl"
           @click="preview(getFileUrl(file.key))"
           @select="toggleSelect(file.key)"
           @contextmenu="showContextMenuFor($event, file)"
