@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 
 const props = defineProps({
   search: {
@@ -19,6 +19,7 @@ const props = defineProps({
 const emit = defineEmits(['update:search', 'toggleTheme', 'login', 'logout']);
 
 const showUserMenu = ref(false);
+const userMenuRef = ref(null);
 
 const userInitial = computed(() => {
   if (!props.user?.username) return '?';
@@ -45,6 +46,24 @@ function handleSwitchAccount() {
   showUserMenu.value = false;
   emit('logout');
 }
+
+function toggleUserMenu() {
+  showUserMenu.value = !showUserMenu.value;
+}
+
+function handleClickOutside(e) {
+  if (userMenuRef.value && !userMenuRef.value.contains(e.target)) {
+    showUserMenu.value = false;
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside);
+});
 </script>
 
 <template>
@@ -117,12 +136,12 @@ function handleSwitchAccount() {
         </button>
 
         <!-- User Menu -->
-        <div class="user-menu-wrapper">
+        <div class="user-menu-wrapper" ref="userMenuRef">
           <!-- Logged In State -->
           <button
             v-if="user"
             class="user-button"
-            @click="showUserMenu = !showUserMenu"
+            @click.stop="toggleUserMenu"
           >
             <span class="user-avatar" :class="{ guest: user.isGuest }">{{ userInitial }}</span>
             <span class="user-name">{{ user.username }}</span>
@@ -218,13 +237,6 @@ function handleSwitchAccount() {
         </div>
       </div>
     </div>
-
-    <!-- Overlay to close dropdown -->
-    <div
-      v-if="showUserMenu"
-      class="dropdown-overlay"
-      @click="showUserMenu = false"
-    ></div>
   </header>
 </template>
 
@@ -485,13 +497,6 @@ function handleSwitchAccount() {
 
 .dropdown-item.logout:hover {
   background: rgba(239, 68, 68, 0.1);
-}
-
-/* Dropdown Overlay */
-.dropdown-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 99;
 }
 
 /* Dropdown Animation */

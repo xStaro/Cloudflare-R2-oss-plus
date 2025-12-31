@@ -780,7 +780,15 @@ export default {
       this.files = [];
       this.folders = [];
       this.loading = true;
-      return fetch(`/api/children/${this.cwd}`)
+
+      // 构建请求头，包含认证信息
+      const headers = {};
+      const credentials = localStorage.getItem('auth_credentials');
+      if (credentials) {
+        headers['Authorization'] = `Basic ${credentials}`;
+      }
+
+      return fetch(`/api/children/${this.cwd}`, { headers })
         .then((res) => {
           if (!res.ok) throw new Error('获取文件列表失败');
           return res.json();
