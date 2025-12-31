@@ -1,10 +1,10 @@
-# FlareDrive - Cloudflare R2 网盘系统
+# StaroDrive - Cloudflare R2 网盘系统
 
 基于 Cloudflare R2 + Pages 搭建的现代化在线网盘系统。
 
 [汉化修改自 longern/FlareDrive](https://github.com/longern/FlareDrive)
 
-![FlareDrive](https://img.shields.io/badge/Cloudflare-R2-F38020?style=flat-square&logo=cloudflare)
+![StaroDrive](https://img.shields.io/badge/Cloudflare-R2-F38020?style=flat-square&logo=cloudflare)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)
 
 ---

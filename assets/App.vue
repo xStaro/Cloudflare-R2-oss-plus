@@ -1087,7 +1087,7 @@ export default {
         }
         document.title = `${
           this.cwd.replace(/.*\/(?!$)|\//g, "") || "/"
-        } - FlareDrive`;
+        } - StaroDrive`;
       },
       immediate: true,
     },

@@ -63,7 +63,7 @@ watch(() => props.modelValue, (val) => {
                 <path d="M2 12l10 5 10-5"/>
               </svg>
             </div>
-            <h2 class="login-title">欢迎使用 FlareDrive</h2>
+            <h2 class="login-title">欢迎使用 StaroDrive</h2>
             <p class="login-subtitle">请登录以继续</p>
           </div>
 
