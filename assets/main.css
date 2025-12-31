@@ -36,6 +36,10 @@
   --radius-lg: 14px;
   --radius-xl: 20px;
   --radius-2xl: 28px;
+  --radius-full: 9999px;
+
+  /* Additional Colors */
+  --bg-tertiary: #e5e7eb;
 
   /* Transitions */
   --transition-fast: 0.15s ease;
@@ -58,6 +62,7 @@
 [data-theme="dark"] {
   --bg-color: #0d1117;
   --bg-secondary: #161b22;
+  --bg-tertiary: #30363d;
   --card-bg: #1c2128;
   --card-hover: #22272e;
   --text-primary: #e6edf3;
@@ -83,6 +88,7 @@
   :root:not([data-theme]) {
     --bg-color: #0d1117;
     --bg-secondary: #161b22;
+    --bg-tertiary: #30363d;
     --card-bg: #1c2128;
     --card-hover: #22272e;
     --text-primary: #e6edf3;

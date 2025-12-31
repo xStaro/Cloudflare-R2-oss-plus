@@ -85,20 +85,28 @@ async function fetchOperationsStats(env: Env): Promise<OperationsStats> {
   // Calculate date range (last 30 days)
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const startDate = thirtyDaysAgo.toISOString().split('T')[0];
-  const endDate = now.toISOString().split('T')[0];
+  const startDate = thirtyDaysAgo.toISOString();
+  const endDate = now.toISOString();
+  const startDateDisplay = startDate.split('T')[0];
+  const endDateDisplay = endDate.split('T')[0];
 
-  // Build GraphQL query
+  // Build filter object
+  const filter: Record<string, any> = {
+    datetime_geq: startDate,
+    datetime_lt: endDate,
+  };
+
+  if (R2_BUCKET_NAME) {
+    filter.bucketName = R2_BUCKET_NAME;
+  }
+
+  // Build GraphQL query - use proper syntax
   const query = `
-    query GetR2Operations($accountTag: String!, $startDate: Date!, $endDate: Date!, $bucketName: String) {
+    query GetR2Operations($accountTag: String!, $filter: AccountR2OperationsAdaptiveGroupsFilter_InputObject!) {
       viewer {
         accounts(filter: { accountTag: $accountTag }) {
           r2OperationsAdaptiveGroups(
-            filter: {
-              datetime_geq: $startDate
-              datetime_lt: $endDate
-              ${R2_BUCKET_NAME ? 'bucketName: $bucketName' : ''}
-            }
+            filter: $filter
             limit: 10000
           ) {
             sum {
@@ -113,15 +121,10 @@ async function fetchOperationsStats(env: Env): Promise<OperationsStats> {
     }
   `;
 
-  const variables: Record<string, string> = {
+  const variables = {
     accountTag: CF_ACCOUNT_ID,
-    startDate,
-    endDate,
+    filter,
   };
-
-  if (R2_BUCKET_NAME) {
-    variables.bucketName = R2_BUCKET_NAME;
-  }
 
   try {
     const response = await fetch('https://api.cloudflare.com/client/v4/graphql', {
@@ -134,15 +137,16 @@ async function fetchOperationsStats(env: Env): Promise<OperationsStats> {
     });
 
     if (!response.ok) {
-      console.error('Analytics API error:', response.status, await response.text());
-      return { classA: 0, classB: 0, period: `${startDate} - ${endDate}`, configured: true };
+      const errorText = await response.text();
+      console.error('Analytics API error:', response.status, errorText);
+      return { classA: 0, classB: 0, period: `${startDateDisplay} - ${endDateDisplay}`, configured: true };
     }
 
     const data = await response.json() as any;
 
     if (data.errors) {
-      console.error('GraphQL errors:', data.errors);
-      return { classA: 0, classB: 0, period: `${startDate} - ${endDate}`, configured: true };
+      console.error('GraphQL errors:', JSON.stringify(data.errors));
+      return { classA: 0, classB: 0, period: `${startDateDisplay} - ${endDateDisplay}`, configured: true };
     }
 
     const groups = data.data?.viewer?.accounts?.[0]?.r2OperationsAdaptiveGroups || [];
@@ -164,12 +168,12 @@ async function fetchOperationsStats(env: Env): Promise<OperationsStats> {
     return {
       classA,
       classB,
-      period: `${startDate} - ${endDate}`,
+      period: `${startDateDisplay} - ${endDateDisplay}`,
       configured: true,
     };
   } catch (error) {
     console.error('Failed to fetch operations stats:', error);
-    return { classA: 0, classB: 0, period: `${startDate} - ${endDate}`, configured: true };
+    return { classA: 0, classB: 0, period: `${startDateDisplay} - ${endDateDisplay}`, configured: true };
   }
 }
 

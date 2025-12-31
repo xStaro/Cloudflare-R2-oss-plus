@@ -101,7 +101,8 @@
 
 | 变量名 | 必需 | 示例值 | 说明 |
 |--------|------|--------|------|
-| `PUBURL` | ✅ | `https://pub-xxx.r2.dev` | R2 公共存储桶 URL |
+| `PUBURL` | ✅ | `https://pub-xxx.r2.dev` | R2 公共存储桶 URL（服务端获取文件用） |
+| `FILE_BASE_URL` | ❌ | `https://cdn.example.com` | 前端文件访问 URL（CDN 回源场景使用） |
 | `GUEST` | ❌ | `public/` | 访客可写目录，多个用逗号分隔 |
 
 ### 用户配置
@@ -151,6 +152,44 @@
 | **B类操作** | GET、HEAD、下载、查询等 | 较低 |
 
 统计周期为最近 30 天，数据缓存 30 分钟。
+
+### CDN 回源配置（可选）
+
+如果你想通过第三方 CDN（如 Edge One、又拍云等）回源访问文件，可以配置 `FILE_BASE_URL`。
+
+#### 使用场景
+
+```
+用户浏览器
+    ↓ 访问
+CDN (例如 Edge One)
+    ↓ 回源
+Cloudflare Pages (本项目)
+    ↓ API 请求
+R2 存储桶
+```
+
+#### 配置步骤
+
+1. **配置 CDN 回源到 R2**
+   - 在 CDN 控制台创建站点（如 `cdn.example.com`）
+   - 配置回源地址为 R2 公共 URL（如 `https://pub-xxx.r2.dev`）
+
+2. **设置环境变量**
+   ```
+   FILE_BASE_URL = https://cdn.example.com
+   ```
+
+3. **工作原理**
+   - 前端请求文件时会使用 `FILE_BASE_URL`（如 `https://cdn.example.com/file.jpg`）
+   - 用户浏览器直接请求 CDN
+   - CDN 回源到 R2 获取文件
+
+#### 不配置时的默认行为
+
+如果不配置 `FILE_BASE_URL`：
+- 前端使用 `/raw/file.jpg` 相对路径
+- 请求通过 Cloudflare Pages Function 代理到 R2
 
 ---
 

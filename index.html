@@ -30,7 +30,13 @@
       const { loadModule } = window["vue3-sfc-loader"];
 
       const options = {
-        moduleCache: { vue: Vue },
+        moduleCache: {
+          vue: Vue,
+          // 暴露 Vue 内置组件
+          Teleport: Vue.Teleport,
+          Transition: Vue.Transition,
+          TransitionGroup: Vue.TransitionGroup,
+        },
         async getFile(url) {
           const res = await fetch(url);
           if (!res.ok)
@@ -56,6 +62,11 @@
         },
         template: "<App></App>",
       });
+
+      // 注册 Vue 内置组件（确保 vue3-sfc-loader 中可用）
+      app.component('Teleport', Vue.Teleport);
+      app.component('Transition', Vue.Transition);
+      app.component('TransitionGroup', Vue.TransitionGroup);
 
       app.mount("#app");
     </script>

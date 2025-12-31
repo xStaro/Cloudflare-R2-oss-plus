@@ -99,7 +99,7 @@
           :viewMode="viewMode"
           :selected="isSelected(file.key)"
           :selectionMode="selectionMode"
-          @click="preview(`/raw/${file.key}`)"
+          @click="preview(getFileUrl(file.key))"
           @select="toggleSelect(file.key)"
           @contextmenu="showContextMenuFor($event, file)"
         />
@@ -186,7 +186,7 @@
             </svg>
             重命名
           </button>
-          <a class="context-menu-item" :href="`/raw/${focusedItem.key}`" target="_blank" download @click="showContextMenu = false">
+          <a class="context-menu-item" :href="getFileUrl(focusedItem.key)" target="_blank" download @click="showContextMenu = false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
@@ -207,7 +207,7 @@
             </svg>
             移动
           </button>
-          <button class="context-menu-item" @click="copyLink(`/raw/${focusedItem.key}`)">
+          <button class="context-menu-item" @click="copyLink(getFileUrl(focusedItem.key))">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
@@ -285,6 +285,9 @@ export default {
     loginLoading: false,
     loginError: '',
     currentUser: null,
+
+    // Config
+    fileBaseUrl: '',
   }),
 
   computed: {
@@ -430,6 +433,26 @@ export default {
       return false;
     },
 
+    // Config
+    async loadConfig() {
+      try {
+        const response = await fetch('/api/config');
+        const config = await response.json();
+        this.fileBaseUrl = config.fileBaseUrl || '';
+      } catch (e) {
+        console.warn('Failed to load config:', e);
+      }
+    },
+
+    getFileUrl(key) {
+      // 如果配置了 fileBaseUrl（CDN 回源），直接使用
+      // 否则使用 /raw/ 路由（通过 Pages Function 代理）
+      if (this.fileBaseUrl) {
+        return `${this.fileBaseUrl}/${key}`;
+      }
+      return `/raw/${key}`;
+    },
+
     // Navigation
     navigateTo(path) {
       this.cwd = path;
@@ -478,7 +501,7 @@ export default {
 
       // For single file, direct download
       if (this.selectedItems.length === 1 && !this.selectedItems[0].endsWith('_$folder$')) {
-        window.open(`/raw/${this.selectedItems[0]}`, '_blank');
+        window.open(this.getFileUrl(this.selectedItems[0]), '_blank');
         return;
       }
 
@@ -499,7 +522,7 @@ export default {
             const items = await this.getAllItems(folderPath);
             for (const item of items) {
               if (!item.key.endsWith('_$folder$')) {
-                const response = await fetch(`/raw/${item.key}`);
+                const response = await fetch(this.getFileUrl(item.key));
                 const blob = await response.blob();
                 const relativePath = item.key.substring(folderPath.length);
                 zip.file(relativePath, blob);
@@ -507,7 +530,7 @@ export default {
             }
           } else {
             // Download single file
-            const response = await fetch(`/raw/${key}`);
+            const response = await fetch(this.getFileUrl(key));
             const blob = await response.blob();
             const fileName = key.split('/').pop();
             zip.file(fileName, blob);
@@ -790,7 +813,7 @@ export default {
 
         for (const item of items) {
           if (!item.key.endsWith('_$folder$')) {
-            const response = await fetch(`/raw/${item.key}`);
+            const response = await fetch(this.getFileUrl(item.key));
             const blob = await response.blob();
             const relativePath = item.key.substring(folderPath.length);
             zip.file(relativePath, blob);
@@ -882,6 +905,9 @@ export default {
   created() {
     // Apply theme on load
     document.documentElement.setAttribute('data-theme', this.theme);
+
+    // Load config (file base URL for CDN)
+    this.loadConfig();
 
     // Restore auth state, show login if not restored
     const restored = this.restoreAuth();

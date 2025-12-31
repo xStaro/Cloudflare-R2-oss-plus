@@ -49,8 +49,16 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   try {
     const base64 = authHeader.split('Basic ')[1];
-    const decoded = atob(base64);
-    const [username, password] = decoded.split(':');
+    // 使用 TextDecoder 处理 Unicode 字符
+    const binaryStr = atob(base64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    const decoded = new TextDecoder().decode(bytes);
+    const colonIndex = decoded.indexOf(':');
+    const username = decoded.substring(0, colonIndex);
+    const password = decoded.substring(colonIndex + 1);
 
     if (!username || !password) {
       return Response.json(response);
@@ -96,7 +104,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     // 返回认证凭据（base64编码）供前端存储
-    const credentials = btoa(`${username}:${password}`);
+    // 使用 TextEncoder 处理 Unicode 字符
+    const encoder = new TextEncoder();
+    const data = encoder.encode(`${username}:${password}`);
+    const credentials = btoa(String.fromCharCode(...data));
 
     return Response.json({
       success: true,

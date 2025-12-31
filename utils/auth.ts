@@ -14,7 +14,13 @@ export function get_auth_status(context) {
     var headers = new Headers(context.request.headers);
     if(!headers.get('Authorization'))return false
     const Authorization=headers.get('Authorization').split("Basic ")[1]
-    const account = atob(Authorization);
+    // 使用 TextDecoder 处理 Unicode 字符
+    const binaryStr = atob(Authorization);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+    }
+    const account = new TextDecoder().decode(bytes);
     if(!account)return false
     if(!context.env[account])return false
     if(dopath.startsWith("_$flaredrive$/thumbnails/"))return true;
