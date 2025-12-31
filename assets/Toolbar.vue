@@ -1,5 +1,5 @@
 <script setup>
-defineProps({
+const props = defineProps({
   viewMode: {
     type: String,
     default: 'grid' // 'grid' | 'list'
@@ -23,6 +23,10 @@ defineProps({
   totalCount: {
     type: Number,
     default: 0
+  },
+  isReadonly: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -183,6 +187,7 @@ function toggleSort(field) {
 
       <!-- Create Folder -->
       <button
+        v-if="!isReadonly"
         class="toolbar-btn"
         @click="emit('createFolder')"
         title="新建文件夹"

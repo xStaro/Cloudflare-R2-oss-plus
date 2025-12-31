@@ -9,22 +9,25 @@ interface AuthResponse {
   username?: string;
   permissions?: string[];
   isAdmin?: boolean;
+  isReadonly?: boolean;
   guestDirs?: string[];
 }
 
 // 解析用户权限
-function parseUserPermissions(env: Env, username: string, password: string): { valid: boolean; permissions: string[]; isAdmin: boolean } {
+function parseUserPermissions(env: Env, username: string, password: string): { valid: boolean; permissions: string[]; isAdmin: boolean; isReadonly: boolean } {
   const account = `${username}:${password}`;
   const permStr = env[account];
 
   if (!permStr) {
-    return { valid: false, permissions: [], isAdmin: false };
+    return { valid: false, permissions: [], isAdmin: false, isReadonly: false };
   }
 
   const permissions = permStr.split(',').map((p: string) => p.trim()).filter(Boolean);
   const isAdmin = permissions.includes('*');
+  // readonly 用户只能查看和下载，不能上传、删除、分享等
+  const isReadonly = permissions.includes('readonly');
 
-  return { valid: true, permissions, isAdmin };
+  return { valid: true, permissions, isAdmin, isReadonly };
 }
 
 // 获取访客可写目录
@@ -64,13 +67,14 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       return Response.json(response);
     }
 
-    const { valid, permissions, isAdmin } = parseUserPermissions(env, username, password);
+    const { valid, permissions, isAdmin, isReadonly } = parseUserPermissions(env, username, password);
 
     if (valid) {
       response.authenticated = true;
       response.username = username;
       response.permissions = permissions;
       response.isAdmin = isAdmin;
+      response.isReadonly = isReadonly;
     }
   } catch (e) {
     // Invalid base64 or other error
@@ -94,7 +98,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       }, { status: 400 });
     }
 
-    const { valid, permissions, isAdmin } = parseUserPermissions(env, username, password);
+    const { valid, permissions, isAdmin, isReadonly } = parseUserPermissions(env, username, password);
 
     if (!valid) {
       return Response.json({
@@ -114,6 +118,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       username,
       permissions,
       isAdmin,
+      isReadonly,
       credentials,
       guestDirs: getGuestDirs(env),
     });

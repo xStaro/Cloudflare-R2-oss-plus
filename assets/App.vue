@@ -30,6 +30,7 @@
         :selectionMode="selectionMode"
         :selectedCount="selectedItems.length"
         :totalCount="filteredFiles.length + filteredFolders.length"
+        :isReadonly="isReadonly"
         @update:viewMode="viewMode = $event"
         @update:sortBy="sortBy = $event"
         @update:sortOrder="sortOrder = $event"
@@ -118,7 +119,7 @@
     />
 
     <!-- Upload FAB -->
-    <button class="fab-button" @click="showUploadPopup = true" title="上传文件">
+    <button class="fab-button" @click="showUploadPopup = true" title="上传文件" v-if="!isReadonly">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
         <polyline points="17 8 12 3 7 8"/>
@@ -143,6 +144,13 @@
       @guestLogin="handleGuestLogin"
     />
 
+    <!-- Share Dialog -->
+    <ShareDialog
+      :show="showShareDialog"
+      :fileKey="shareFileKey"
+      @close="showShareDialog = false"
+    />
+
     <!-- Context Menu Dialog -->
     <Dialog v-model="showContextMenu">
       <div class="context-menu">
@@ -165,13 +173,13 @@
             </svg>
             下载文件夹
           </button>
-          <button class="context-menu-item" @click="moveFile(focusedItem + '_$folder$')">
+          <button class="context-menu-item" @click="moveFile(focusedItem + '_$folder$')" v-if="!isReadonly">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
             移动
           </button>
-          <button class="context-menu-item danger" @click="removeFile(focusedItem + '_$folder$')">
+          <button class="context-menu-item danger" @click="removeFile(focusedItem + '_$folder$')" v-if="!isReadonly">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6"/>
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -180,7 +188,7 @@
           </button>
         </div>
         <div v-else class="context-menu-body">
-          <button class="context-menu-item" @click="renameFile(focusedItem.key)">
+          <button class="context-menu-item" @click="renameFile(focusedItem.key)" v-if="!isReadonly">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -202,7 +210,7 @@
             </svg>
             复制
           </button>
-          <button class="context-menu-item" @click="moveFile(focusedItem.key)">
+          <button class="context-menu-item" @click="moveFile(focusedItem.key)" v-if="!isReadonly">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
@@ -215,7 +223,17 @@
             </svg>
             复制链接
           </button>
-          <button class="context-menu-item danger" @click="removeFile(focusedItem.key)">
+          <button class="context-menu-item" @click="openShareDialog(focusedItem.key)" v-if="!isReadonly">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="18" cy="5" r="3"/>
+              <circle cx="6" cy="12" r="3"/>
+              <circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+            分享
+          </button>
+          <button class="context-menu-item danger" @click="removeFile(focusedItem.key)" v-if="!isReadonly">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6"/>
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -244,6 +262,7 @@ import FileCard from "./FileCard.vue";
 import BatchBar from "./BatchBar.vue";
 import UploadPopup from "./UploadPopup.vue";
 import LoginDialog from "./LoginDialog.vue";
+import ShareDialog from "./ShareDialog.vue";
 
 export default {
   data: () => ({
@@ -289,6 +308,10 @@ export default {
 
     // Config
     fileBaseUrl: '',
+
+    // Share
+    showShareDialog: false,
+    shareFileKey: '',
   }),
 
   computed: {
@@ -350,6 +373,9 @@ export default {
       }
       return this.focusedItem.key?.split('/').pop() || '';
     },
+    isReadonly() {
+      return this.currentUser?.isReadonly === true;
+    },
   },
 
   methods: {
@@ -385,6 +411,7 @@ export default {
           username: data.username,
           permissions: data.permissions,
           isAdmin: data.isAdmin,
+          isReadonly: data.isReadonly,
         }));
 
         // 设置 axios 默认 header
@@ -394,6 +421,7 @@ export default {
           username: data.username,
           permissions: data.permissions,
           isAdmin: data.isAdmin,
+          isReadonly: data.isReadonly,
         };
 
         this.showLoginDialog = false;
@@ -627,6 +655,12 @@ export default {
     copyLink(link) {
       const url = new URL(link, window.location.origin);
       navigator.clipboard.writeText(url.toString());
+      this.showContextMenu = false;
+    },
+
+    openShareDialog(fileKey) {
+      this.shareFileKey = fileKey;
+      this.showShareDialog = true;
       this.showContextMenu = false;
     },
 
@@ -969,6 +1003,7 @@ export default {
     BatchBar,
     UploadPopup,
     LoginDialog,
+    ShareDialog,
   },
 };
 </script>
