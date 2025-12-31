@@ -80,7 +80,8 @@
 
     <!-- Meta Info -->
     <div class="file-card-meta">
-      {{ isFolder ? '文件夹' : formatSize(file.size) }}
+      <span>{{ isFolder ? '文件夹' : formatSize(file.size) }}</span>
+      <span v-if="file.uploaded && !isFolder" class="file-card-time">{{ formatDate(file.uploaded) }}</span>
     </div>
   </div>
 
@@ -341,6 +342,14 @@ export default {
   font-size: 12px;
   color: var(--text-muted);
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-card-time {
+  font-size: 11px;
+  opacity: 0.8;
 }
 
 /* List Item Styles */
