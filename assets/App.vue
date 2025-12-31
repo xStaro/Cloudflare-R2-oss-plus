@@ -294,6 +294,16 @@ export default {
     filteredFiles() {
       let files = [...this.files];
 
+      // Filter out folder markers and invalid entries
+      files = files.filter((file) => {
+        if (!file.key) return false;
+        // 过滤掉文件夹标记
+        if (file.key.endsWith('_$folder$')) return false;
+        // 过滤掉以 / 结尾的对象（可能是空文件夹标记）
+        if (file.key.endsWith('/')) return false;
+        return true;
+      });
+
       // Filter by search
       if (this.search) {
         files = files.filter((file) =>
@@ -455,7 +465,15 @@ export default {
 
     // Navigation
     navigateTo(path) {
-      this.cwd = path;
+      // 规范化路径（确保一致性）
+      const normalizedPath = path || '';
+
+      // 如果路径相同，强制刷新
+      if (this.cwd === normalizedPath) {
+        this.fetchFiles();
+      } else {
+        this.cwd = normalizedPath;
+      }
       this.clearSelection();
     },
 
@@ -642,10 +660,20 @@ export default {
       this.folders = [];
       this.loading = true;
       fetch(`/api/children/${this.cwd}`)
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) throw new Error('获取文件列表失败');
+          return res.json();
+        })
         .then((files) => {
-          this.files = files.value;
-          this.folders = files.folders;
+          this.files = files.value || [];
+          this.folders = files.folders || [];
+        })
+        .catch((error) => {
+          console.error('Fetch files error:', error);
+          this.files = [];
+          this.folders = [];
+        })
+        .finally(() => {
           this.loading = false;
         });
     },
