@@ -327,6 +327,9 @@ export default {
     showShareDialog: false,
     shareFileKey: '',
 
+    // Guest Upload Password
+    guestUploadPassword: localStorage.getItem('guest_upload_password') || '',
+
     // Input Dialog
     showInputDialog: false,
     inputDialogConfig: {
@@ -845,6 +848,10 @@ export default {
           this.uploadProgress = percentCompleted;
         };
         if (thumbnailDigest) headers["fd-thumbnail"] = thumbnailDigest;
+        // 访客上传添加密码头
+        if (this.currentUser?.isGuest && this.guestUploadPassword) {
+          headers["X-Guest-Password"] = this.guestUploadPassword;
+        }
         if (file.size >= SIZE_LIMIT) {
           await multipartUpload(`${basedir}${file.name}`, file, {
             headers,
@@ -854,6 +861,12 @@ export default {
           await axios.put(uploadUrl, file, { headers, onUploadProgress });
         }
       } catch (error) {
+        // 如果是401错误，可能是密码错误，清除保存的密码
+        if (error.response?.status === 401 && this.currentUser?.isGuest) {
+          this.guestUploadPassword = '';
+          localStorage.removeItem('guest_upload_password');
+          alert('上传密码错误，请重新输入');
+        }
         fetch("/api/write/")
           .then((value) => {
             if (value.redirected) window.location.href = value.url;
@@ -1028,6 +1041,30 @@ export default {
     uploadFiles(files) {
       if (this.cwd && !this.cwd.endsWith("/")) this.cwd += "/";
 
+      // 访客上传需要验证密码
+      if (this.currentUser?.isGuest && !this.guestUploadPassword) {
+        this.showInput({
+          title: '访客上传验证',
+          description: '请输入上传密码',
+          placeholder: '请输入密码',
+          hint: '访客上传需要提供密码验证',
+          icon: 'folder',
+          confirmText: '确认',
+          callback: (password) => {
+            if (password) {
+              this.guestUploadPassword = password;
+              localStorage.setItem('guest_upload_password', password);
+              this.doUploadFiles(files);
+            }
+          }
+        });
+        return;
+      }
+
+      this.doUploadFiles(files);
+    },
+
+    doUploadFiles(files) {
       const uploadTasks = Array.from(files).map((file) => ({
         basedir: this.cwd,
         file,
