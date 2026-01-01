@@ -643,7 +643,7 @@ export default {
 
       // For multiple files or folders, use JSZip if available
       if (typeof JSZip === 'undefined') {
-        alert('批量下载需要 JSZip 库支持，请刷新页面后重试');
+        this.$refs.toast?.error('批量下载需要 JSZip 库支持，请刷新页面后重试');
         return;
       }
 
@@ -683,7 +683,7 @@ export default {
         this.clearSelection();
       } catch (error) {
         console.error('Batch download failed:', error);
-        alert('批量下载失败');
+        this.$refs.toast?.error('批量下载失败');
       } finally {
         this.batchLoading = false;
       }
@@ -703,7 +703,7 @@ export default {
         this.$refs.statsCards?.refresh();
       } catch (error) {
         console.error('Batch delete failed:', error);
-        alert('批量删除失败');
+        this.$refs.toast?.error('批量删除失败');
       } finally {
         this.batchLoading = false;
       }
@@ -735,7 +735,7 @@ export default {
             this.fetchFiles();
           } catch (error) {
             console.error('Batch move failed:', error);
-            alert('批量移动失败');
+            this.$refs.toast?.error('批量移动失败');
           } finally {
             this.batchLoading = false;
           }
@@ -936,7 +936,7 @@ export default {
         if (error.response?.status === 401 && this.currentUser?.isGuest) {
           this.guestUploadPassword = '';
           localStorage.removeItem('guest_upload_password');
-          alert('上传密码错误，请重新输入');
+          this.$refs.toast?.error('上传密码错误，请重新输入');
         }
         fetch("/api/write/")
           .then((value) => {
@@ -974,7 +974,7 @@ export default {
             this.fetchFiles();
           } catch (error) {
             console.error('Rename failed:', error);
-            alert('重命名失败');
+            this.$refs.toast?.error('重命名失败');
           }
         }
       });
@@ -982,7 +982,9 @@ export default {
 
     renameFolder(folderPath) {
       // folderPath 格式: "path/to/folder/" 或 "folder/"
-      const pathParts = folderPath.replace(/\/$/, '').split('/');
+      // 规范化路径：确保以 / 结尾
+      const normalizedPath = folderPath.endsWith('/') ? folderPath : folderPath + '/';
+      const pathParts = normalizedPath.replace(/\/$/, '').split('/');
       const currentName = pathParts.pop();
       const parentPath = pathParts.length > 0 ? pathParts.join('/') + '/' : '';
 
@@ -999,15 +1001,16 @@ export default {
 
           // 检查名称是否包含非法字符
           if (newName.includes('/') || newName.includes('\\')) {
-            alert('文件夹名称不能包含 / 或 \\');
+            this.$refs.toast?.error('文件夹名称不能包含 / 或 \\');
             return;
           }
 
           try {
-            const sourcePath = folderPath; // 如 "docs/old/"
+            const sourcePath = normalizedPath; // 如 "docs/old/"
             const targetPath = parentPath + newName + '/'; // 如 "docs/new/"
-            const sourceMarker = sourcePath.slice(0, -1) + '_$folder$';
-            const targetMarker = targetPath.slice(0, -1) + '_$folder$';
+            // 文件夹标记格式: "docs/old_$folder$" (不带末尾斜杠)
+            const sourceMarker = sourcePath.replace(/\/$/, '') + '_$folder$';
+            const targetMarker = targetPath.replace(/\/$/, '') + '_$folder$';
 
             // 获取文件夹内所有项目
             const allItems = await this.getAllItems(sourcePath);
@@ -1026,6 +1029,7 @@ export default {
                 this.uploadProgress = (processedItems / totalItems) * 100;
               } catch (error) {
                 console.error(`重命名 ${item.key} 失败:`, error);
+                throw error; // 抛出错误以便外层捕获
               }
             }
 
@@ -1034,11 +1038,12 @@ export default {
             await axios.delete(`/api/write/items/${sourceMarker}`);
             this.uploadProgress = null;
 
+            this.$refs.toast?.success('文件夹重命名成功');
             this.fetchFiles();
           } catch (error) {
             console.error('重命名文件夹失败:', error);
             this.uploadProgress = null;
-            alert('重命名文件夹失败');
+            this.$refs.toast?.error('重命名文件夹失败，请重试');
           }
         }
       });
@@ -1097,7 +1102,7 @@ export default {
             this.fetchFiles();
           } catch (error) {
             console.error('移动失败:', error);
-            alert('移动失败,请检查目标路径是否正确');
+            this.$refs.toast?.error('移动失败，请检查目标路径是否正确');
           }
         }
       });
@@ -1105,7 +1110,7 @@ export default {
 
     async downloadFolder(folderPath) {
       if (typeof JSZip === 'undefined') {
-        alert('文件夹下载需要 JSZip 库支持');
+        this.$refs.toast?.error('文件夹下载需要 JSZip 库支持');
         return;
       }
 
@@ -1135,7 +1140,7 @@ export default {
         URL.revokeObjectURL(url);
       } catch (error) {
         console.error('Download folder failed:', error);
-        alert('文件夹下载失败');
+        this.$refs.toast?.error('文件夹下载失败');
       } finally {
         this.batchLoading = false;
       }
