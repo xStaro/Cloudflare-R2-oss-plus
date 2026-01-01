@@ -1111,9 +1111,18 @@ export default {
               }
             }
 
-            // 复制并删除文件夹标记
-            await this.copyPaste(sourceMarker, targetMarker);
-            await axios.delete(`/api/write/items/${sourceMarker}`);
+            // 处理文件夹标记：尝试复制，如果不存在则创建新的
+            try {
+              await this.copyPaste(sourceMarker, targetMarker);
+              await axios.delete(`/api/write/items/${sourceMarker}`);
+            } catch (error) {
+              // 源文件夹标记不存在，直接创建新的标记
+              if (error.response?.status === 404) {
+                await axios.put(`/api/write/items/${targetMarker}`, '');
+              } else {
+                throw error;
+              }
+            }
             this.uploadProgress = null;
 
             this.$refs.toast?.success('文件夹重命名成功');
