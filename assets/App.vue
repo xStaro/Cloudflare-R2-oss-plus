@@ -179,6 +179,13 @@
           {{ focusedItemName }}
         </div>
         <div v-if="typeof focusedItem === 'string'" class="context-menu-body">
+          <button class="context-menu-item" @click="renameFolder(focusedItem)" v-if="!isReadonly">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            重命名
+          </button>
           <button class="context-menu-item" @click="copyLink(`/?p=${encodeURIComponent(focusedItem)}`)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
@@ -968,6 +975,70 @@ export default {
           } catch (error) {
             console.error('Rename failed:', error);
             alert('重命名失败');
+          }
+        }
+      });
+    },
+
+    renameFolder(folderPath) {
+      // folderPath 格式: "path/to/folder/" 或 "folder/"
+      const pathParts = folderPath.replace(/\/$/, '').split('/');
+      const currentName = pathParts.pop();
+      const parentPath = pathParts.length > 0 ? pathParts.join('/') + '/' : '';
+
+      this.showContextMenu = false;
+      this.showInput({
+        title: '重命名文件夹',
+        description: `将 "${currentName}" 重命名为`,
+        placeholder: '请输入新名称',
+        defaultValue: currentName,
+        icon: 'rename',
+        confirmText: '重命名',
+        callback: async (newName) => {
+          if (!newName || newName === currentName) return;
+
+          // 检查名称是否包含非法字符
+          if (newName.includes('/') || newName.includes('\\')) {
+            alert('文件夹名称不能包含 / 或 \\');
+            return;
+          }
+
+          try {
+            const sourcePath = folderPath; // 如 "docs/old/"
+            const targetPath = parentPath + newName + '/'; // 如 "docs/new/"
+            const sourceMarker = sourcePath.slice(0, -1) + '_$folder$';
+            const targetMarker = targetPath.slice(0, -1) + '_$folder$';
+
+            // 获取文件夹内所有项目
+            const allItems = await this.getAllItems(sourcePath);
+            const totalItems = allItems.length + 1; // +1 是文件夹标记本身
+            let processedItems = 0;
+
+            // 复制所有文件到新路径
+            for (const item of allItems) {
+              const relativePath = item.key.substring(sourcePath.length);
+              const newItemPath = targetPath + relativePath;
+
+              try {
+                await this.copyPaste(item.key, newItemPath);
+                await axios.delete(`/api/write/items/${item.key}`);
+                processedItems++;
+                this.uploadProgress = (processedItems / totalItems) * 100;
+              } catch (error) {
+                console.error(`重命名 ${item.key} 失败:`, error);
+              }
+            }
+
+            // 复制并删除文件夹标记
+            await this.copyPaste(sourceMarker, targetMarker);
+            await axios.delete(`/api/write/items/${sourceMarker}`);
+            this.uploadProgress = null;
+
+            this.fetchFiles();
+          } catch (error) {
+            console.error('重命名文件夹失败:', error);
+            this.uploadProgress = null;
+            alert('重命名文件夹失败');
           }
         }
       });
