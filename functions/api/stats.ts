@@ -1,3 +1,5 @@
+import { INTERNAL_PREFIX, FOLDER_MARKER } from "@/utils/auth";
+
 interface Env {
   BUCKET: R2Bucket;
   // Optional: for R2 operations analytics
@@ -5,6 +7,11 @@ interface Env {
   CF_API_TOKEN?: string;
   R2_BUCKET_NAME?: string;
 }
+
+// ==================== 常量 ====================
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const ANALYTICS_PERIOD_DAYS = 30;
+const LIST_PAGE_SIZE = 1000;
 
 interface FileTypeStats {
   count: number;
@@ -41,7 +48,6 @@ interface StatsResponse {
 
 // Simple in-memory cache (will reset on cold start)
 let statsCache: { data: StatsResponse; timestamp: number } | null = null;
-const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 // Class A operations (write operations)
 const CLASS_A_ACTIONS = [
@@ -238,10 +244,10 @@ async function fetchOperationsStats(env: Env): Promise<OperationsStats> {
     };
   }
 
-  // Calculate date range (last 30 days)
+  // Calculate date range
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const startDate = thirtyDaysAgo.toISOString();
+  const periodStart = new Date(now.getTime() - ANALYTICS_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+  const startDate = periodStart.toISOString();
   const endDate = now.toISOString();
   const startDateDisplay = startDate.split('T')[0];
   const endDateDisplay = endDate.split('T')[0];
@@ -339,7 +345,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const forceRefresh = url.searchParams.has('refresh') || url.searchParams.has('nocache');
 
   // Check cache
-  if (!forceRefresh && statsCache && Date.now() - statsCache.timestamp < CACHE_TTL) {
+  if (!forceRefresh && statsCache && Date.now() - statsCache.timestamp < CACHE_TTL_MS) {
     return Response.json({
       ...statsCache.data,
       cached: true,
@@ -381,16 +387,16 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     do {
       const listed = await BUCKET.list({
         cursor,
-        limit: 1000,
+        limit: LIST_PAGE_SIZE,
         include: ['httpMetadata'],
       });
 
       for (const object of listed.objects) {
         // Skip internal files
-        if (object.key.startsWith('_$flaredrive$/')) continue;
-        if (object.key.endsWith('_$folder$')) {
+        if (object.key.startsWith(`${INTERNAL_PREFIX}/`)) continue;
+        if (object.key.endsWith(FOLDER_MARKER)) {
           // Count folder markers
-          const folderPath = object.key.replace('_$folder$', '');
+          const folderPath = object.key.replace(FOLDER_MARKER, '');
           folderSet.add(folderPath);
           continue;
         }

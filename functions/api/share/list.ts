@@ -1,7 +1,9 @@
 import { ShareData } from "@/utils/share";
+import { decodeBasicAuth } from "@/utils/auth";
 
 interface Env {
   ossShares: KVNamespace;
+  [key: string]: any;
 }
 
 // GET - 列出当前用户的分享
@@ -9,7 +11,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const headers = new Headers(context.request.headers);
   const authHeader = headers.get('Authorization');
 
-  if (!authHeader) {
+  const credentials = decodeBasicAuth(authHeader || '');
+  if (!credentials) {
     return new Response(JSON.stringify({ error: '需要登录' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' }
@@ -17,17 +20,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 
   try {
-    // 获取当前用户名
-    const base64 = authHeader.split("Basic ")[1];
-    const binaryStr = atob(base64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-    const account = new TextDecoder().decode(bytes);
-    const username = account.split(':')[0];
+    const { username, account } = credentials;
     const userPerms = context.env[account];
-    const isAdmin = userPerms === '*';
+    const isAdmin = userPerms === '*' || (userPerms && userPerms.split(',').map((p: string) => p.trim()).includes('*'));
 
     // 列出所有分享
     const list = await context.env.ossShares.list({ prefix: 'share:' });
@@ -35,32 +30,37 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     const now = Date.now();
 
     for (const key of list.keys) {
-      const shareJson = await context.env.ossShares.get(key.name);
-      if (shareJson) {
-        const share: ShareData = JSON.parse(shareJson);
+      try {
+        const shareJson = await context.env.ossShares.get(key.name);
+        if (shareJson) {
+          const share: ShareData = JSON.parse(shareJson);
 
-        // 只返回当前用户的分享（管理员可以看到所有）
-        if (!isAdmin && share.createdBy !== username) {
-          continue;
+          // 只返回当前用户的分享（管理员可以看到所有）
+          if (!isAdmin && share.createdBy !== username) {
+            continue;
+          }
+
+          // 检查是否过期
+          if (share.expiresAt && now > share.expiresAt) {
+            await context.env.ossShares.delete(key.name);
+            continue;
+          }
+
+          shares.push({
+            id: share.id,
+            fileName: share.fileName,
+            fileSize: share.fileSize,
+            createdAt: share.createdAt,
+            expiresAt: share.expiresAt,
+            hasPassword: !!share.password,
+            maxDownloads: share.maxDownloads || null,
+            downloads: share.downloads,
+            createdBy: share.createdBy
+          });
         }
-
-        // 检查是否过期
-        if (share.expiresAt && now > share.expiresAt) {
-          await context.env.ossShares.delete(key.name);
-          continue;
-        }
-
-        shares.push({
-          id: share.id,
-          fileName: share.fileName,
-          fileSize: share.fileSize,
-          createdAt: share.createdAt,
-          expiresAt: share.expiresAt,
-          hasPassword: !!share.password,
-          maxDownloads: share.maxDownloads || null,
-          downloads: share.downloads,
-          createdBy: share.createdBy
-        });
+      } catch {
+        // 跳过无法解析的分享数据
+        continue;
       }
     }
 

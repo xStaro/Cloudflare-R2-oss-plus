@@ -1,4 +1,5 @@
 import { parseBucketPath } from "@/utils/bucket";
+import { decodeBasicAuth } from "@/utils/auth";
 import {
   ShareData,
   generateShareId,
@@ -10,43 +11,35 @@ import {
 interface Env {
   BUCKET: R2Bucket;
   ossShares: KVNamespace;
+  [key: string]: any;
 }
 
 // 验证用户是否有写入权限
 function checkWritePermission(context: any): { allowed: boolean; username: string } {
   const headers = new Headers(context.request.headers);
   const authHeader = headers.get('Authorization');
-  if (!authHeader) return { allowed: false, username: '' };
 
-  try {
-    const base64 = authHeader.split("Basic ")[1];
-    const binaryStr = atob(base64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-    const account = new TextDecoder().decode(bytes);
-    if (!account) return { allowed: false, username: '' };
-
-    const username = account.split(':')[0] || '';
-
-    // 检查用户权限
-    const userPerms = context.env[account];
-    if (!userPerms) return { allowed: false, username };
-
-    // 解析权限列表
-    const permissions = userPerms.split(',').map((p: string) => p.trim());
-
-    // 检查是否是只读用户
-    if (permissions.includes('readonly')) {
-      return { allowed: false, username };
-    }
-
-    // 管理员或有任何写权限的用户都可以创建分享
-    return { allowed: true, username };
-  } catch {
+  const credentials = decodeBasicAuth(authHeader || '');
+  if (!credentials) {
     return { allowed: false, username: '' };
   }
+
+  const { username, account } = credentials;
+
+  // 检查用户权限
+  const userPerms = context.env[account];
+  if (!userPerms) return { allowed: false, username };
+
+  // 解析权限列表
+  const permissions = userPerms.split(',').map((p: string) => p.trim());
+
+  // 检查是否是只读用户
+  if (permissions.includes('readonly')) {
+    return { allowed: false, username };
+  }
+
+  // 管理员或有任何写权限的用户都可以创建分享
+  return { allowed: true, username };
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {

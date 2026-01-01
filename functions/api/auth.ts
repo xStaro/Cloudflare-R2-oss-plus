@@ -1,3 +1,10 @@
+import {
+  decodeBasicAuth,
+  encodeBasicAuth,
+  parseUserPermissions,
+  getGuestDirs
+} from "@/utils/auth";
+
 interface Env {
   BUCKET: R2Bucket;
   GUEST?: string;
@@ -13,29 +20,6 @@ interface AuthResponse {
   guestDirs?: string[];
 }
 
-// 解析用户权限
-function parseUserPermissions(env: Env, username: string, password: string): { valid: boolean; permissions: string[]; isAdmin: boolean; isReadonly: boolean } {
-  const account = `${username}:${password}`;
-  const permStr = env[account];
-
-  if (!permStr) {
-    return { valid: false, permissions: [], isAdmin: false, isReadonly: false };
-  }
-
-  const permissions = permStr.split(',').map((p: string) => p.trim()).filter(Boolean);
-  const isAdmin = permissions.includes('*');
-  // readonly 用户只能查看和下载，不能上传、删除、分享等
-  const isReadonly = permissions.includes('readonly');
-
-  return { valid: true, permissions, isAdmin, isReadonly };
-}
-
-// 获取访客可写目录
-function getGuestDirs(env: Env): string[] {
-  if (!env.GUEST) return [];
-  return env.GUEST.split(',').map((p: string) => p.trim()).filter(Boolean);
-}
-
 // GET /api/auth - 检查当前认证状态
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
@@ -46,38 +30,23 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     guestDirs: getGuestDirs(env),
   };
 
-  if (!authHeader || !authHeader.startsWith('Basic ')) {
+  const credentials = decodeBasicAuth(authHeader || '');
+  if (!credentials) {
     return Response.json(response);
   }
 
-  try {
-    const base64 = authHeader.split('Basic ')[1];
-    // 使用 TextDecoder 处理 Unicode 字符
-    const binaryStr = atob(base64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-    const decoded = new TextDecoder().decode(bytes);
-    const colonIndex = decoded.indexOf(':');
-    const username = decoded.substring(0, colonIndex);
-    const password = decoded.substring(colonIndex + 1);
+  const { valid, permissions, isAdmin, isReadonly } = parseUserPermissions(
+    env,
+    credentials.username,
+    credentials.password
+  );
 
-    if (!username || !password) {
-      return Response.json(response);
-    }
-
-    const { valid, permissions, isAdmin, isReadonly } = parseUserPermissions(env, username, password);
-
-    if (valid) {
-      response.authenticated = true;
-      response.username = username;
-      response.permissions = permissions;
-      response.isAdmin = isAdmin;
-      response.isReadonly = isReadonly;
-    }
-  } catch (e) {
-    // Invalid base64 or other error
+  if (valid) {
+    response.authenticated = true;
+    response.username = credentials.username;
+    response.permissions = permissions;
+    response.isAdmin = isAdmin;
+    response.isReadonly = isReadonly;
   }
 
   return Response.json(response);
@@ -108,10 +77,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     // 返回认证凭据（base64编码）供前端存储
-    // 使用 TextEncoder 处理 Unicode 字符
-    const encoder = new TextEncoder();
-    const data = encoder.encode(`${username}:${password}`);
-    const credentials = btoa(String.fromCharCode(...data));
+    const credentials = encodeBasicAuth(username, password);
 
     return Response.json({
       success: true,
@@ -122,7 +88,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       credentials,
       guestDirs: getGuestDirs(env),
     });
-  } catch (e) {
+  } catch {
     return Response.json({
       success: false,
       error: '请求格式错误',

@@ -1,16 +1,17 @@
 import { notFound, parseBucketPath } from "@/utils/bucket";
+import { decodeBasicAuth, getGuestDirs, INTERNAL_PREFIX, FOLDER_MARKER } from "@/utils/auth";
 
-// 解析用户权限
+// 解析用户权限（用于文件列表访问）
 function parseUserPermissions(env: any, authHeader: string | null): {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isGuest: boolean;
   allowedPaths: string[];
 } {
-  // 默认返回访客状态
-  const guestDirs = env.GUEST ? env.GUEST.split(',').map((p: string) => p.trim()).filter(Boolean) : [];
+  const guestDirs = getGuestDirs(env);
 
-  if (!authHeader || !authHeader.startsWith('Basic ')) {
+  const credentials = decodeBasicAuth(authHeader || '');
+  if (!credentials) {
     return {
       isAuthenticated: false,
       isAdmin: false,
@@ -19,49 +20,30 @@ function parseUserPermissions(env: any, authHeader: string | null): {
     };
   }
 
-  try {
-    const base64 = authHeader.split('Basic ')[1];
-    const binaryStr = atob(base64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-    const account = new TextDecoder().decode(bytes);
-
-    if (!account) {
-      return { isAuthenticated: false, isAdmin: false, isGuest: true, allowedPaths: guestDirs };
-    }
-
-    const userPerms = env[account];
-    if (!userPerms) {
-      return { isAuthenticated: false, isAdmin: false, isGuest: true, allowedPaths: guestDirs };
-    }
-
-    const permissions = userPerms.split(',').map((p: string) => p.trim()).filter(Boolean);
-    const isAdmin = permissions.includes('*');
-
-    // 管理员可以访问所有路径
-    if (isAdmin) {
-      return { isAuthenticated: true, isAdmin: true, isGuest: false, allowedPaths: [] };
-    }
-
-    // 普通用户 - 提取允许的路径（排除特殊权限标记）
-    const allowedPaths = permissions.filter((p: string) =>
-      p !== 'readonly' && p.startsWith('/')
-    ).map((p: string) => p.replace(/^\//, '')); // 移除开头的斜杠
-
-    return { isAuthenticated: true, isAdmin: false, isGuest: false, allowedPaths };
-  } catch {
+  const userPerms = env[credentials.account];
+  if (!userPerms) {
     return { isAuthenticated: false, isAdmin: false, isGuest: true, allowedPaths: guestDirs };
   }
+
+  const permissions = userPerms.split(',').map((p: string) => p.trim()).filter(Boolean);
+  const isAdmin = permissions.includes('*');
+
+  // 管理员可以访问所有路径
+  if (isAdmin) {
+    return { isAuthenticated: true, isAdmin: true, isGuest: false, allowedPaths: [] };
+  }
+
+  // 普通用户 - 提取允许的路径（排除特殊权限标记）
+  const allowedPaths = permissions.filter((p: string) =>
+    p !== 'readonly' && p.startsWith('/')
+  ).map((p: string) => p.replace(/^\//, '')); // 移除开头的斜杠
+
+  return { isAuthenticated: true, isAdmin: false, isGuest: false, allowedPaths };
 }
 
 // 检查路径是否在允许的范围内
 function isPathAllowed(path: string, allowedPaths: string[], isAdmin: boolean): boolean {
-  // 管理员可以访问所有路径
   if (isAdmin) return true;
-
-  // 如果没有配置允许的路径，则不允许访问任何内容
   if (!allowedPaths || allowedPaths.length === 0) return false;
 
   const normalizedPath = path.replace(/\/+$/, '');
@@ -131,7 +113,7 @@ export async function onRequestGet(context) {
     // 规范化路径：移除末尾斜杠后再添加，确保格式一致
     const normalizedPath = path ? path.replace(/\/+$/, '') : '';
     const prefix = normalizedPath ? `${normalizedPath}/` : '';
-    if (!bucket || normalizedPath.startsWith("_$flaredrive$")) return notFound();
+    if (!bucket || normalizedPath.startsWith(INTERNAL_PREFIX)) return notFound();
 
     // 权限检查
     const authHeader = context.request.headers.get('Authorization');
@@ -151,8 +133,8 @@ export async function onRequestGet(context) {
     });
     const objKeys = objList.objects
       .filter((obj) => {
-        // 过滤掉文件夹标记（以 _$folder$ 结尾）
-        if (obj.key.endsWith("/_$folder$")) return false;
+        // 过滤掉文件夹标记
+        if (obj.key.endsWith(`/${FOLDER_MARKER}`)) return false;
         // 过滤掉以 / 结尾的对象（空文件夹标记）
         if (obj.key.endsWith("/")) return false;
         // 过滤掉 prefix 本身（当前文件夹）
@@ -166,7 +148,7 @@ export async function onRequestGet(context) {
 
     let folders = objList.delimitedPrefixes;
     if (!normalizedPath)
-      folders = folders.filter((folder) => folder !== "_$flaredrive$/");
+      folders = folders.filter((folder) => folder !== `${INTERNAL_PREFIX}/`);
 
     // 根据权限过滤文件夹和文件
     const filteredFolders = filterFolders(folders, allowedPaths, isAdmin);

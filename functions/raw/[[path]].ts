@@ -1,49 +1,35 @@
 import { notFound, parseBucketPath } from "@/utils/bucket";
+import { decodeBasicAuth, getGuestDirs, THUMBNAILS_PATH } from "@/utils/auth";
 
 // 解析用户权限
 function parseUserPermissions(env: any, authHeader: string | null): {
   isAdmin: boolean;
   allowedPaths: string[];
 } {
-  const guestDirs = env.GUEST ? env.GUEST.split(',').map((p: string) => p.trim()).filter(Boolean) : [];
+  const guestDirs = getGuestDirs(env);
 
-  if (!authHeader || !authHeader.startsWith('Basic ')) {
+  const credentials = decodeBasicAuth(authHeader || '');
+  if (!credentials) {
     return { isAdmin: false, allowedPaths: guestDirs };
   }
 
-  try {
-    const base64 = authHeader.split('Basic ')[1];
-    const binaryStr = atob(base64);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (let i = 0; i < binaryStr.length; i++) {
-      bytes[i] = binaryStr.charCodeAt(i);
-    }
-    const account = new TextDecoder().decode(bytes);
-
-    if (!account) {
-      return { isAdmin: false, allowedPaths: guestDirs };
-    }
-
-    const userPerms = env[account];
-    if (!userPerms) {
-      return { isAdmin: false, allowedPaths: guestDirs };
-    }
-
-    const permissions = userPerms.split(',').map((p: string) => p.trim()).filter(Boolean);
-    const isAdmin = permissions.includes('*');
-
-    if (isAdmin) {
-      return { isAdmin: true, allowedPaths: [] };
-    }
-
-    const allowedPaths = permissions.filter((p: string) =>
-      p !== 'readonly' && p.startsWith('/')
-    ).map((p: string) => p.replace(/^\//, ''));
-
-    return { isAdmin: false, allowedPaths };
-  } catch {
+  const userPerms = env[credentials.account];
+  if (!userPerms) {
     return { isAdmin: false, allowedPaths: guestDirs };
   }
+
+  const permissions = userPerms.split(',').map((p: string) => p.trim()).filter(Boolean);
+  const isAdmin = permissions.includes('*');
+
+  if (isAdmin) {
+    return { isAdmin: true, allowedPaths: [] };
+  }
+
+  const allowedPaths = permissions.filter((p: string) =>
+    p !== 'readonly' && p.startsWith('/')
+  ).map((p: string) => p.replace(/^\//, ''));
+
+  return { isAdmin: false, allowedPaths };
 }
 
 // 检查文件路径是否在允许的范围内
@@ -51,7 +37,7 @@ function isFileAllowed(filePath: string, allowedPaths: string[], isAdmin: boolea
   if (isAdmin) return true;
 
   // 缩略图始终允许访问
-  if (filePath.startsWith('_$flaredrive$/thumbnails/')) return true;
+  if (filePath.startsWith(THUMBNAILS_PATH)) return true;
 
   if (!allowedPaths || allowedPaths.length === 0) return false;
 
@@ -110,7 +96,7 @@ export async function onRequestGet(context) {
     const headers = new Headers(response.headers);
 
     // 缩略图设置长期缓存
-    if (path.startsWith("_$flaredrive$/thumbnails/")) {
+    if (path.startsWith(THUMBNAILS_PATH)) {
       headers.set("Cache-Control", "max-age=31536000");
     }
 
