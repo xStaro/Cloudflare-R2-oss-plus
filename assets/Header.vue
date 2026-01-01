@@ -16,7 +16,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['update:search', 'toggleTheme', 'login', 'logout']);
+const emit = defineEmits(['update:search', 'toggleTheme', 'login', 'logout', 'showShareList']);
 
 const showUserMenu = ref(false);
 const userMenuRef = ref(null);
@@ -220,6 +220,20 @@ onUnmounted(() => {
                     无写入权限
                   </span>
                 </div>
+              </div>
+
+              <!-- Admin: Share Management -->
+              <div v-if="user.isAdmin" class="dropdown-section">
+                <button class="dropdown-item admin-action" @click="showUserMenu = false; emit('showShareList')">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="18" cy="5" r="3"/>
+                    <circle cx="6" cy="12" r="3"/>
+                    <circle cx="18" cy="19" r="3"/>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                  </svg>
+                  分享管理
+                </button>
               </div>
 
               <div class="dropdown-divider"></div>
@@ -497,6 +511,14 @@ onUnmounted(() => {
 
 .dropdown-item.logout:hover {
   background: rgba(239, 68, 68, 0.1);
+}
+
+.dropdown-item.admin-action {
+  color: var(--primary-color);
+}
+
+.dropdown-item.admin-action:hover {
+  background: rgba(243, 128, 32, 0.1);
 }
 
 /* Dropdown Animation */

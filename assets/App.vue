@@ -15,6 +15,7 @@
       @toggleTheme="toggleTheme"
       @login="showLoginDialog = true"
       @logout="handleLogout"
+      @showShareList="showShareListDialog = true"
     />
 
     <!-- Main Content -->
@@ -152,6 +153,12 @@
       @close="showShareDialog = false"
     />
 
+    <!-- Share List Dialog (Admin) -->
+    <ShareListDialog
+      :show="showShareListDialog"
+      @close="showShareListDialog = false"
+    />
+
     <!-- Input Dialog -->
     <InputDialog
       v-model="showInputDialog"
@@ -280,6 +287,7 @@ import BatchBar from "./BatchBar.vue";
 import UploadPopup from "./UploadPopup.vue";
 import LoginDialog from "./LoginDialog.vue";
 import ShareDialog from "./ShareDialog.vue";
+import ShareListDialog from "./ShareListDialog.vue";
 import InputDialog from "./InputDialog.vue";
 import Toast from "./Toast.vue";
 
@@ -332,6 +340,9 @@ export default {
     // Share
     showShareDialog: false,
     shareFileKey: '',
+
+    // Share List (admin)
+    showShareListDialog: false,
 
     // Guest Upload Password
     guestUploadPassword: localStorage.getItem('guest_upload_password') || '',
@@ -1157,6 +1168,7 @@ export default {
     UploadPopup,
     LoginDialog,
     ShareDialog,
+    ShareListDialog,
     InputDialog,
     Toast,
   },
