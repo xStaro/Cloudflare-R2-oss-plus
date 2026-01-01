@@ -1228,20 +1228,33 @@ export default {
       const items = [];
       let marker = null;
 
+      // 确保 prefix 以 / 结尾
+      const normalizedPrefix = prefix.endsWith('/') ? prefix : prefix + '/';
+
       do {
-        const url = new URL(`/api/children/${prefix}`, window.location.origin);
+        const url = new URL(`/api/children/${normalizedPrefix}`, window.location.origin);
         if (marker) {
           url.searchParams.set('marker', marker);
         }
 
-        const response = await fetch(url);
+        // 添加认证头
+        const headers = {};
+        const credentials = localStorage.getItem('auth_credentials');
+        if (credentials) {
+          headers['Authorization'] = `Basic ${credentials}`;
+        }
+
+        const response = await fetch(url, { headers });
         const data = await response.json();
 
         items.push(...data.value);
 
         for (const folder of data.folders) {
+          // folder 格式: "docs/subfolder/" (带末尾斜杠)
+          // 文件夹标记格式: "docs/subfolder_$folder$" (不带末尾斜杠)
+          const folderMarkerKey = folder.replace(/\/$/, '') + '_$folder$';
           items.push({
-            key: folder + '_$folder$',
+            key: folderMarkerKey,
             size: 0,
             uploaded: new Date().toISOString(),
           });
