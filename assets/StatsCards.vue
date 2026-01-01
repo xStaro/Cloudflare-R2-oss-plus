@@ -32,10 +32,12 @@ const typePercentages = computed(() => {
   const { fileTypes } = stats.value.storage;
   const total = stats.value.storage.totalFiles || 1;
   return {
-    images: Math.round((fileTypes.images.count / total) * 100),
-    videos: Math.round((fileTypes.videos.count / total) * 100),
-    documents: Math.round((fileTypes.documents.count / total) * 100),
-    others: Math.round((fileTypes.others.count / total) * 100),
+    images: Math.round(((fileTypes.images?.count || 0) / total) * 100),
+    videos: Math.round(((fileTypes.videos?.count || 0) / total) * 100),
+    documents: Math.round(((fileTypes.documents?.count || 0) / total) * 100),
+    archives: Math.round(((fileTypes.archives?.count || 0) / total) * 100),
+    executables: Math.round(((fileTypes.executables?.count || 0) / total) * 100),
+    others: Math.round(((fileTypes.others?.count || 0) / total) * 100),
   };
 });
 
@@ -128,11 +130,27 @@ defineExpose({ refresh });
         <div class="stat-details">
           <div class="stat-detail-item">
             <span class="detail-dot images"></span>
-            <span>图片 {{ stats.storage.fileTypes.images.count }}</span>
+            <span>图片 {{ stats.storage.fileTypes.images?.count || 0 }}</span>
           </div>
           <div class="stat-detail-item">
             <span class="detail-dot videos"></span>
-            <span>视频 {{ stats.storage.fileTypes.videos.count }}</span>
+            <span>视频 {{ stats.storage.fileTypes.videos?.count || 0 }}</span>
+          </div>
+          <div class="stat-detail-item">
+            <span class="detail-dot documents"></span>
+            <span>文档 {{ stats.storage.fileTypes.documents?.count || 0 }}</span>
+          </div>
+          <div class="stat-detail-item">
+            <span class="detail-dot archives"></span>
+            <span>压缩/包 {{ stats.storage.fileTypes.archives?.count || 0 }}</span>
+          </div>
+          <div class="stat-detail-item">
+            <span class="detail-dot executables"></span>
+            <span>程序 {{ stats.storage.fileTypes.executables?.count || 0 }}</span>
+          </div>
+          <div class="stat-detail-item">
+            <span class="detail-dot others"></span>
+            <span>其他 {{ stats.storage.fileTypes.others?.count || 0 }}</span>
           </div>
         </div>
       </div>
@@ -166,6 +184,16 @@ defineExpose({ refresh });
               :title="`文档 ${typePercentages.documents}%`"
             ></div>
             <div
+              class="type-segment archives"
+              :style="{ width: typePercentages.archives + '%' }"
+              :title="`压缩/包 ${typePercentages.archives}%`"
+            ></div>
+            <div
+              class="type-segment executables"
+              :style="{ width: typePercentages.executables + '%' }"
+              :title="`程序 ${typePercentages.executables}%`"
+            ></div>
+            <div
               class="type-segment others"
               :style="{ width: typePercentages.others + '%' }"
               :title="`其他 ${typePercentages.others}%`"
@@ -175,22 +203,32 @@ defineExpose({ refresh });
             <div class="legend-item">
               <span class="legend-dot images"></span>
               <span class="legend-label">图片</span>
-              <span class="legend-value">{{ formatSize(stats.storage.fileTypes.images.size) }}</span>
+              <span class="legend-value">{{ formatSize(stats.storage.fileTypes.images?.size || 0) }}</span>
             </div>
             <div class="legend-item">
               <span class="legend-dot videos"></span>
               <span class="legend-label">视频</span>
-              <span class="legend-value">{{ formatSize(stats.storage.fileTypes.videos.size) }}</span>
+              <span class="legend-value">{{ formatSize(stats.storage.fileTypes.videos?.size || 0) }}</span>
             </div>
             <div class="legend-item">
               <span class="legend-dot documents"></span>
               <span class="legend-label">文档</span>
-              <span class="legend-value">{{ formatSize(stats.storage.fileTypes.documents.size) }}</span>
+              <span class="legend-value">{{ formatSize(stats.storage.fileTypes.documents?.size || 0) }}</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot archives"></span>
+              <span class="legend-label">压缩/包</span>
+              <span class="legend-value">{{ formatSize(stats.storage.fileTypes.archives?.size || 0) }}</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot executables"></span>
+              <span class="legend-label">程序</span>
+              <span class="legend-value">{{ formatSize(stats.storage.fileTypes.executables?.size || 0) }}</span>
             </div>
             <div class="legend-item">
               <span class="legend-dot others"></span>
               <span class="legend-label">其他</span>
-              <span class="legend-value">{{ formatSize(stats.storage.fileTypes.others.size) }}</span>
+              <span class="legend-value">{{ formatSize(stats.storage.fileTypes.others?.size || 0) }}</span>
             </div>
           </div>
         </div>
@@ -353,6 +391,8 @@ defineExpose({ refresh });
 .type-segment.images { background: #3b82f6; }
 .type-segment.videos { background: #ef4444; }
 .type-segment.documents { background: #10b981; }
+.type-segment.archives { background: #f59e0b; }
+.type-segment.executables { background: #06b6d4; }
 .type-segment.others { background: #8b5cf6; }
 
 .type-legend {
@@ -379,6 +419,8 @@ defineExpose({ refresh });
 .legend-dot.images, .detail-dot.images { background: #3b82f6; }
 .legend-dot.videos, .detail-dot.videos { background: #ef4444; }
 .legend-dot.documents, .detail-dot.documents { background: #10b981; }
+.legend-dot.archives, .detail-dot.archives { background: #f59e0b; }
+.legend-dot.executables, .detail-dot.executables { background: #06b6d4; }
 .legend-dot.others, .detail-dot.others { background: #8b5cf6; }
 
 .legend-label {
@@ -395,6 +437,7 @@ defineExpose({ refresh });
 .stat-details {
   display: flex;
   gap: 16px;
+  flex-wrap: wrap;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--divider-color);

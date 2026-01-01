@@ -11,6 +11,8 @@ interface FileTypeStats {
   size: number;
 }
 
+type FileType = 'images' | 'videos' | 'documents' | 'archives' | 'executables' | 'others';
+
 interface OperationsStats {
   classA: number;
   classB: number;
@@ -27,6 +29,8 @@ interface StatsResponse {
       images: FileTypeStats;
       videos: FileTypeStats;
       documents: FileTypeStats;
+      archives: FileTypeStats;
+      executables: FileTypeStats;
       others: FileTypeStats;
     };
   };
@@ -55,12 +59,46 @@ const CLASS_B_ACTIONS = [
   'GetBucketCors', 'GetBucketEncryption', 'GetBucketLifecycleConfiguration'
 ];
 
-function getFileType(contentType: string): 'images' | 'videos' | 'documents' | 'others' {
+function getFileType(contentType: string): FileType {
   if (contentType.startsWith('image/')) return 'images';
   if (contentType.startsWith('video/')) return 'videos';
+
   if (
-    contentType.startsWith('application/pdf') ||
-    contentType.startsWith('application/msword') ||
+    contentType === 'application/java-archive' ||
+    contentType === 'application/zip' ||
+    contentType === 'application/x-zip-compressed' ||
+    contentType === 'application/x-7z-compressed' ||
+    contentType === 'application/x-rar-compressed' ||
+    contentType === 'application/vnd.rar' ||
+    contentType === 'application/x-tar' ||
+    contentType === 'application/gzip' ||
+    contentType === 'application/x-gzip' ||
+    contentType === 'application/x-bzip2' ||
+    contentType === 'application/x-xz' ||
+    contentType === 'application/zstd'
+  ) {
+    return 'archives';
+  }
+
+  if (
+    contentType === 'application/x-msdownload' ||
+    contentType === 'application/vnd.microsoft.portable-executable' ||
+    contentType === 'application/x-dosexec' ||
+    contentType === 'application/x-executable' ||
+    contentType === 'application/x-apple-diskimage' ||
+    contentType === 'application/vnd.apple.installer+xml' ||
+    contentType === 'application/vnd.android.package-archive'
+  ) {
+    return 'executables';
+  }
+
+  if (
+    contentType === 'application/pdf' ||
+    contentType === 'application/msword' ||
+    contentType === 'application/json' ||
+    contentType === 'application/xml' ||
+    contentType.endsWith('+json') ||
+    contentType.endsWith('+xml') ||
     contentType.startsWith('application/vnd.') ||
     contentType.startsWith('text/')
   ) {
@@ -122,6 +160,38 @@ const DOCUMENT_EXTENSIONS = new Set([
   'yml',
 ]);
 
+const ARCHIVE_EXTENSIONS = new Set([
+  '7z',
+  'bz2',
+  'ear',
+  'gz',
+  'jar',
+  'lz',
+  'lz4',
+  'rar',
+  'tar',
+  'tbz',
+  'tbz2',
+  'tgz',
+  'txz',
+  'war',
+  'xz',
+  'zip',
+  'zst',
+]);
+
+const EXECUTABLE_EXTENSIONS = new Set([
+  'app',
+  'bat',
+  'cmd',
+  'dmg',
+  'exe',
+  'msi',
+  'pkg',
+  'run',
+  'sh',
+]);
+
 function normalizeContentType(contentType: string | undefined): string | null {
   if (!contentType) return null;
   const normalized = contentType.split(';')[0]?.trim().toLowerCase();
@@ -138,15 +208,20 @@ function getFileExtension(key: string): string | null {
   return ext || null;
 }
 
-function getFileTypeFromMetadata(contentType: string | undefined, key: string): 'images' | 'videos' | 'documents' | 'others' {
+function getFileTypeFromMetadata(contentType: string | undefined, key: string): FileType {
   const normalizedContentType = normalizeContentType(contentType);
-  if (normalizedContentType) return getFileType(normalizedContentType);
+  if (normalizedContentType) {
+    const fileType = getFileType(normalizedContentType);
+    if (fileType !== 'others') return fileType;
+  }
 
   const ext = getFileExtension(key);
   if (!ext) return 'others';
   if (IMAGE_EXTENSIONS.has(ext)) return 'images';
   if (VIDEO_EXTENSIONS.has(ext)) return 'videos';
   if (DOCUMENT_EXTENSIONS.has(ext)) return 'documents';
+  if (ARCHIVE_EXTENSIONS.has(ext)) return 'archives';
+  if (EXECUTABLE_EXTENSIONS.has(ext)) return 'executables';
   return 'others';
 }
 
@@ -282,6 +357,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         images: { count: 0, size: 0 },
         videos: { count: 0, size: 0 },
         documents: { count: 0, size: 0 },
+        archives: { count: 0, size: 0 },
+        executables: { count: 0, size: 0 },
         others: { count: 0, size: 0 },
       },
     },
