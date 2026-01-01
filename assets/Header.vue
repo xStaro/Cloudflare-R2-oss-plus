@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import AdvancedSearchPanel from './AdvancedSearchPanel.vue';
 
 const props = defineProps({
   search: {
@@ -17,6 +18,23 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:search', 'toggleTheme', 'login', 'logout', 'showShareList']);
+
+const showAdvancedSearch = ref(false);
+const searchWrapperRef = ref(null);
+
+function toggleAdvancedSearch() {
+  showAdvancedSearch.value = !showAdvancedSearch.value;
+}
+
+function handleAdvancedSearchApply(searchStr) {
+  emit('update:search', searchStr);
+}
+
+function handleClickOutsideSearch(e) {
+  if (searchWrapperRef.value && !searchWrapperRef.value.contains(e.target)) {
+    showAdvancedSearch.value = false;
+  }
+}
 
 const showUserMenu = ref(false);
 const userMenuRef = ref(null);
@@ -59,10 +77,12 @@ function handleClickOutside(e) {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside);
+  document.addEventListener('click', handleClickOutsideSearch);
 });
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
+  document.removeEventListener('click', handleClickOutsideSearch);
 });
 </script>
 
@@ -91,7 +111,7 @@ onUnmounted(() => {
       <div class="header-spacer"></div>
 
       <!-- Search (Centered) -->
-      <div class="search-wrapper">
+      <div class="search-wrapper" ref="searchWrapperRef">
         <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="8"/>
           <path d="m21 21-4.35-4.35"/>
@@ -99,10 +119,28 @@ onUnmounted(() => {
         <input
           type="search"
           class="search-input"
-          placeholder="搜索文件...（例：type:压缩 ext:jar size>100MB）"
+          placeholder="搜索文件..."
           :value="search"
           @input="emit('update:search', $event.target.value)"
           aria-label="搜索文件"
+        />
+        <button
+          class="filter-btn"
+          :class="{ active: showAdvancedSearch || search }"
+          @click.stop="toggleAdvancedSearch"
+          title="高级搜索"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+        </button>
+
+        <!-- 高级搜索面板 -->
+        <AdvancedSearchPanel
+          :show="showAdvancedSearch"
+          :current-search="search"
+          @close="showAdvancedSearch = false"
+          @apply="handleAdvancedSearchApply"
         />
       </div>
 
@@ -255,6 +293,49 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* Search Wrapper */
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 400px;
+  width: 100%;
+}
+
+.filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-left: 6px;
+  padding: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+  flex-shrink: 0;
+}
+
+.filter-btn:hover {
+  background: var(--hover-bg);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.filter-btn.active {
+  background: rgba(243, 128, 32, 0.1);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.filter-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
 /* Spacer to push actions to the right edge */
 .header-spacer {
   flex: 1;
@@ -558,6 +639,21 @@ onUnmounted(() => {
     bottom: 16px;
     min-width: auto;
     border-radius: var(--radius-xl);
+  }
+
+  .search-wrapper {
+    max-width: none;
+    flex: 1;
+  }
+
+  .filter-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .filter-btn svg {
+    width: 16px;
+    height: 16px;
   }
 }
 </style>
