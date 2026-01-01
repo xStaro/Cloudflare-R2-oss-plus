@@ -9,11 +9,12 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'toast', 'confirm']);
 
 const loading = ref(false);
 const shares = ref([]);
 const deleteLoading = ref(null);
+const pendingDeleteId = ref(null);
 
 // 加载分享列表
 async function loadShares() {
@@ -37,9 +38,19 @@ async function loadShares() {
 }
 
 // 删除分享
-async function deleteShare(id) {
-  if (!confirm('确定要删除这个分享吗？')) return;
+function deleteShare(id) {
+  pendingDeleteId.value = id;
+  emit('confirm', {
+    title: '确认删除',
+    message: '确定要删除这个分享吗？',
+    confirmText: '删除',
+    type: 'danger',
+    callback: () => doDeleteShare(id)
+  });
+}
 
+// 执行删除
+async function doDeleteShare(id) {
   deleteLoading.value = id;
   try {
     const credentials = localStorage.getItem('auth_credentials');
@@ -52,14 +63,16 @@ async function deleteShare(id) {
 
     if (response.ok) {
       shares.value = shares.value.filter(s => s.id !== id);
+      emit('toast', { type: 'success', message: '分享已删除' });
     } else {
-      alert('删除失败');
+      emit('toast', { type: 'error', message: '删除失败' });
     }
   } catch (error) {
     console.error('删除分享失败:', error);
-    alert('删除失败');
+    emit('toast', { type: 'error', message: '删除失败' });
   } finally {
     deleteLoading.value = null;
+    pendingDeleteId.value = null;
   }
 }
 
@@ -67,7 +80,7 @@ async function deleteShare(id) {
 function copyLink(id) {
   const url = `${window.location.origin}/s/${id}`;
   navigator.clipboard.writeText(url);
-  alert('链接已复制');
+  emit('toast', { type: 'success', message: '链接已复制' });
 }
 
 // 格式化文件大小

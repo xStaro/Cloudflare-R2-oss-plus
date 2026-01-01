@@ -157,6 +157,8 @@
     <ShareListDialog
       :show="showShareListDialog"
       @close="showShareListDialog = false"
+      @toast="handleToast"
+      @confirm="showConfirm"
     />
 
     <!-- Input Dialog -->
@@ -170,6 +172,17 @@
       :confirmText="inputDialogConfig.confirmText"
       :icon="inputDialogConfig.icon"
       @confirm="handleInputConfirm"
+    />
+
+    <!-- Confirm Dialog -->
+    <ConfirmDialog
+      v-model="showConfirmDialog"
+      :title="confirmDialogConfig.title"
+      :message="confirmDialogConfig.message"
+      :confirmText="confirmDialogConfig.confirmText"
+      :cancelText="confirmDialogConfig.cancelText"
+      :type="confirmDialogConfig.type"
+      @confirm="handleConfirmDialogConfirm"
     />
 
     <!-- Context Menu Dialog -->
@@ -302,6 +315,7 @@ import LoginDialog from "./LoginDialog.vue";
 import ShareDialog from "./ShareDialog.vue";
 import ShareListDialog from "./ShareListDialog.vue";
 import InputDialog from "./InputDialog.vue";
+import ConfirmDialog from "./ConfirmDialog.vue";
 import Toast from "./Toast.vue";
 
 export default {
@@ -370,6 +384,17 @@ export default {
       defaultValue: '',
       confirmText: '确定',
       icon: '',
+      callback: null,
+    },
+
+    // Confirm Dialog
+    showConfirmDialog: false,
+    confirmDialogConfig: {
+      title: '确认操作',
+      message: '',
+      confirmText: '确定',
+      cancelText: '取消',
+      type: 'warning',
       callback: null,
     },
   }),
@@ -473,6 +498,17 @@ export default {
       this.theme = this.theme === 'dark' ? 'light' : 'dark';
       localStorage.setItem('theme', this.theme);
       document.documentElement.setAttribute('data-theme', this.theme);
+    },
+
+    // 处理子组件的 Toast 消息
+    handleToast({ type, message }) {
+      if (type === 'success') {
+        this.$refs.toast?.success(message);
+      } else if (type === 'error') {
+        this.$refs.toast?.error(message);
+      } else {
+        this.$refs.toast?.info?.(message) || this.$refs.toast?.success(message);
+      }
     },
 
     // Auth
@@ -691,22 +727,30 @@ export default {
 
     async batchDelete() {
       if (!this.selectedItems.length) return;
-      if (!window.confirm(`确定要删除选中的 ${this.selectedItems.length} 个项目吗？`)) return;
 
-      this.batchLoading = true;
-      try {
-        for (const key of this.selectedItems) {
-          await axios.delete(`/api/write/items/${key}`);
+      this.showConfirm({
+        title: '确认删除',
+        message: `确定要删除选中的 ${this.selectedItems.length} 个项目吗？`,
+        confirmText: '删除',
+        type: 'danger',
+        callback: async () => {
+          this.batchLoading = true;
+          try {
+            for (const key of this.selectedItems) {
+              await axios.delete(`/api/write/items/${key}`);
+            }
+            this.clearSelection();
+            this.fetchFiles();
+            this.$refs.statsCards?.refresh();
+            this.$refs.toast?.success('删除成功');
+          } catch (error) {
+            console.error('Batch delete failed:', error);
+            this.$refs.toast?.error('批量删除失败');
+          } finally {
+            this.batchLoading = false;
+          }
         }
-        this.clearSelection();
-        this.fetchFiles();
-        this.$refs.statsCards?.refresh();
-      } catch (error) {
-        console.error('Batch delete failed:', error);
-        this.$refs.toast?.error('批量删除失败');
-      } finally {
-        this.batchLoading = false;
-      }
+      });
     },
 
     batchMove() {
@@ -780,6 +824,25 @@ export default {
     handleInputConfirm(value) {
       if (this.inputDialogConfig.callback) {
         this.inputDialogConfig.callback(value);
+      }
+    },
+
+    // Confirm Dialog Helper
+    showConfirm(config) {
+      this.confirmDialogConfig = {
+        title: config.title || '确认操作',
+        message: config.message || '确定要执行此操作吗？',
+        confirmText: config.confirmText || '确定',
+        cancelText: config.cancelText || '取消',
+        type: config.type || 'warning',
+        callback: config.callback || null,
+      };
+      this.showConfirmDialog = true;
+    },
+
+    handleConfirmDialogConfirm() {
+      if (this.confirmDialogConfig.callback) {
+        this.confirmDialogConfig.callback();
       }
     },
 
@@ -949,11 +1012,26 @@ export default {
     },
 
     async removeFile(key) {
-      if (!window.confirm(`确定要删除 ${key} 吗？`)) return;
+      const fileName = key.split('/').pop().replace('_$folder$', '');
       this.showContextMenu = false;
-      await axios.delete(`/api/write/items/${key}`);
-      this.fetchFiles();
-      this.$refs.statsCards?.refresh();
+
+      this.showConfirm({
+        title: '确认删除',
+        message: `确定要删除 "${fileName}" 吗？`,
+        confirmText: '删除',
+        type: 'danger',
+        callback: async () => {
+          try {
+            await axios.delete(`/api/write/items/${key}`);
+            this.fetchFiles();
+            this.$refs.statsCards?.refresh();
+            this.$refs.toast?.success('删除成功');
+          } catch (error) {
+            console.error('Delete failed:', error);
+            this.$refs.toast?.error('删除失败');
+          }
+        }
+      });
     },
 
     renameFile(key) {
@@ -1277,6 +1355,7 @@ export default {
     ShareDialog,
     ShareListDialog,
     InputDialog,
+    ConfirmDialog,
     Toast,
   },
 };
