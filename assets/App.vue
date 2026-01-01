@@ -277,6 +277,12 @@ import {
   multipartUpload,
   SIZE_LIMIT,
 } from "/assets/main.mjs";
+import {
+  getFileExtension,
+  getFileNameFromKey,
+  getFileTypeForFile,
+  parseSearchQuery,
+} from "/assets/search.mjs";
 import Dialog from "./Dialog.vue";
 import Header from "./Header.vue";
 import StatsCards from "./StatsCards.vue";
@@ -362,6 +368,10 @@ export default {
   }),
 
   computed: {
+    searchFilters() {
+      return parseSearchQuery(this.search);
+    },
+
     filteredFiles() {
       let files = [...this.files];
 
@@ -376,10 +386,30 @@ export default {
       });
 
       // Filter by search
-      if (this.search) {
+      const filters = this.searchFilters;
+
+      if (filters.nameTerms.length) {
         files = files.filter((file) =>
-          file.key.split("/").pop().toLowerCase().includes(this.search.toLowerCase())
+          filters.nameTerms.every((term) =>
+            getFileNameFromKey(file.key).toLowerCase().includes(term)
+          )
         );
+      }
+
+      if (filters.types) {
+        files = files.filter((file) => filters.types.has(getFileTypeForFile(file)));
+      }
+
+      if (filters.extensions) {
+        files = files.filter((file) => filters.extensions.has(getFileExtension(file.key)));
+      }
+
+      if (filters.minSizeBytes !== null) {
+        files = files.filter((file) => file.size >= filters.minSizeBytes);
+      }
+
+      if (filters.maxSizeBytes !== null) {
+        files = files.filter((file) => file.size <= filters.maxSizeBytes);
       }
 
       // Sort
@@ -400,9 +430,10 @@ export default {
 
     filteredFolders() {
       let folders = [...this.folders];
-      if (this.search) {
+      const { nameTerms } = this.searchFilters;
+      if (nameTerms.length) {
         folders = folders.filter((folder) =>
-          folder.toLowerCase().includes(this.search.toLowerCase())
+          nameTerms.every((term) => folder.toLowerCase().includes(term))
         );
       }
       // Sort folders alphabetically

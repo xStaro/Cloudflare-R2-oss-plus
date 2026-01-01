@@ -99,7 +99,7 @@ onUnmounted(() => {
         <input
           type="search"
           class="search-input"
-          placeholder="搜索文件..."
+          placeholder="搜索文件...（例：type:压缩 ext:jar size>100MB）"
           :value="search"
           @input="emit('update:search', $event.target.value)"
           aria-label="搜索文件"
