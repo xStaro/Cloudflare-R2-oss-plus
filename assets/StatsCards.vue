@@ -40,11 +40,12 @@ const typePercentages = computed(() => {
 });
 
 // 获取统计数据
-async function fetchStats() {
+async function fetchStats(forceRefresh = false) {
   loading.value = true;
   error.value = null;
   try {
-    const response = await fetch('/api/stats');
+    const url = forceRefresh ? `/api/stats?refresh=1&_=${Date.now()}` : '/api/stats';
+    const response = await fetch(url);
     if (!response.ok) throw new Error('获取统计数据失败');
     stats.value = await response.json();
   } catch (e) {
@@ -55,11 +56,11 @@ async function fetchStats() {
   }
 }
 
-onMounted(fetchStats);
+onMounted(() => fetchStats(false));
 
 // 刷新统计
 function refresh() {
-  fetchStats();
+  fetchStats(true);
 }
 
 defineExpose({ refresh });

@@ -69,6 +69,87 @@ function getFileType(contentType: string): 'images' | 'videos' | 'documents' | '
   return 'others';
 }
 
+const IMAGE_EXTENSIONS = new Set([
+  'avif',
+  'bmp',
+  'gif',
+  'heic',
+  'heif',
+  'ico',
+  'jpeg',
+  'jpg',
+  'png',
+  'svg',
+  'tif',
+  'tiff',
+  'webp',
+]);
+
+const VIDEO_EXTENSIONS = new Set([
+  '3g2',
+  '3gp',
+  'avi',
+  'flv',
+  'm4v',
+  'mkv',
+  'mov',
+  'mp4',
+  'mpeg',
+  'mpg',
+  'ogv',
+  'webm',
+  'wmv',
+]);
+
+const DOCUMENT_EXTENSIONS = new Set([
+  'csv',
+  'doc',
+  'docx',
+  'htm',
+  'html',
+  'json',
+  'md',
+  'pdf',
+  'ppt',
+  'pptx',
+  'rtf',
+  'ts',
+  'txt',
+  'xls',
+  'xlsx',
+  'xml',
+  'yaml',
+  'yml',
+]);
+
+function normalizeContentType(contentType: string | undefined): string | null {
+  if (!contentType) return null;
+  const normalized = contentType.split(';')[0]?.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'application/octet-stream' || normalized === 'binary/octet-stream') return null;
+  return normalized;
+}
+
+function getFileExtension(key: string): string | null {
+  const lastDot = key.lastIndexOf('.');
+  const lastSlash = key.lastIndexOf('/');
+  if (lastDot <= lastSlash) return null;
+  const ext = key.slice(lastDot + 1).trim().toLowerCase();
+  return ext || null;
+}
+
+function getFileTypeFromMetadata(contentType: string | undefined, key: string): 'images' | 'videos' | 'documents' | 'others' {
+  const normalizedContentType = normalizeContentType(contentType);
+  if (normalizedContentType) return getFileType(normalizedContentType);
+
+  const ext = getFileExtension(key);
+  if (!ext) return 'others';
+  if (IMAGE_EXTENSIONS.has(ext)) return 'images';
+  if (VIDEO_EXTENSIONS.has(ext)) return 'videos';
+  if (DOCUMENT_EXTENSIONS.has(ext)) return 'documents';
+  return 'others';
+}
+
 async function fetchOperationsStats(env: Env): Promise<OperationsStats> {
   const { CF_ACCOUNT_ID, CF_API_TOKEN, R2_BUCKET_NAME } = env;
 
@@ -179,9 +260,11 @@ async function fetchOperationsStats(env: Env): Promise<OperationsStats> {
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { BUCKET } = context.env;
+  const url = new URL(context.request.url);
+  const forceRefresh = url.searchParams.has('refresh') || url.searchParams.has('nocache');
 
   // Check cache
-  if (statsCache && Date.now() - statsCache.timestamp < CACHE_TTL) {
+  if (!forceRefresh && statsCache && Date.now() - statsCache.timestamp < CACHE_TTL) {
     return Response.json({
       ...statsCache.data,
       cached: true,
@@ -222,6 +305,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       const listed = await BUCKET.list({
         cursor,
         limit: 1000,
+        include: ['httpMetadata'],
       });
 
       for (const object of listed.objects) {
@@ -239,8 +323,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         stats.storage.totalSize += object.size;
 
         // Categorize by file type
-        const contentType = object.httpMetadata?.contentType || 'application/octet-stream';
-        const fileType = getFileType(contentType);
+        const fileType = getFileTypeFromMetadata(object.httpMetadata?.contentType, object.key);
         stats.storage.fileTypes[fileType].count++;
         stats.storage.fileTypes[fileType].size += object.size;
 
@@ -267,7 +350,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
     return Response.json(stats, {
       headers: {
-        'Cache-Control': 'public, max-age=60',
+        'Cache-Control': forceRefresh ? 'no-store' : 'public, max-age=60',
       },
     });
   } catch (error) {

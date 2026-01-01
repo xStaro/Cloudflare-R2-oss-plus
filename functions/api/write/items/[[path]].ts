@@ -109,14 +109,19 @@ export async function onRequestPut(context) {
   const request: Request = context.request;
 
   let content = request.body;
+  let httpMetadata: R2HTTPMetadata | undefined;
   const customMetadata: Record<string, string> = {};
 
-  if (request.headers.has("x-amz-copy-source")) {
+  const isCopy = request.headers.has("x-amz-copy-source");
+
+  if (isCopy) {
     const sourceName = decodeURIComponent(
       request.headers.get("x-amz-copy-source")
     );
     const source = await bucket.get(sourceName);
+    if (!source) return notFound();
     content = source.body;
+    httpMetadata = source.httpMetadata;
     if (source.customMetadata.thumbnail)
       customMetadata.thumbnail = source.customMetadata.thumbnail;
   }
@@ -124,7 +129,15 @@ export async function onRequestPut(context) {
   if (request.headers.has("fd-thumbnail"))
     customMetadata.thumbnail = request.headers.get("fd-thumbnail");
 
-  const obj = await bucket.put(path, content, { customMetadata });
+  if (!httpMetadata && !isCopy) {
+    const contentType = request.headers.get("content-type") || undefined;
+    if (contentType) httpMetadata = { contentType };
+  }
+
+  const putOptions: { customMetadata: Record<string, string>; httpMetadata?: R2HTTPMetadata } = { customMetadata };
+  if (httpMetadata) putOptions.httpMetadata = httpMetadata;
+
+  const obj = await bucket.put(path, content, putOptions);
   const { key, size, uploaded } = obj;
   return new Response(JSON.stringify({ key, size, uploaded }), {
     headers: { "Content-Type": "application/json" },
