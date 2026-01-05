@@ -169,3 +169,22 @@ export function getWriteAuthStatus(context: any): boolean {
 
 // 兼容旧的函数名
 export const get_auth_status = getWriteAuthStatus;
+
+/**
+ * 检查是否为管理员（用于管理工具等）
+ */
+export function isAdminUser(context: any): boolean {
+  const headers = new Headers(context.request.headers);
+  const authHeader = headers.get('Authorization');
+
+  if (!authHeader) return false;
+
+  const credentials = decodeBasicAuth(authHeader);
+  if (!credentials) return false;
+
+  const permStr = context.env[credentials.account];
+  if (!permStr) return false;
+
+  const permissions = permStr.split(',').map((p: string) => p.trim());
+  return permissions.includes('*');
+}

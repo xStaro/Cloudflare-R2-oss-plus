@@ -156,6 +156,16 @@ export default {
       this.$emit('update:modelValue', false);
     },
 
+    // 获取认证头
+    getAuthHeaders() {
+      const headers = { 'Content-Type': 'application/json' };
+      const credentials = localStorage.getItem('auth_credentials');
+      if (credentials) {
+        headers['Authorization'] = `Basic ${credentials}`;
+      }
+      return headers;
+    },
+
     formatSize(bytes) {
       if (bytes === 0) return '0 B';
       const k = 1024;
@@ -169,7 +179,9 @@ export default {
       this.cleanupResult = null;
 
       try {
-        const response = await fetch('/api/cleanup-thumbnails');
+        const response = await fetch('/api/cleanup-thumbnails', {
+          headers: this.getAuthHeaders(),
+        });
 
         if (!response.ok) {
           if (response.status === 401) {
@@ -197,6 +209,7 @@ export default {
       try {
         const response = await fetch('/api/cleanup-thumbnails', {
           method: 'POST',
+          headers: this.getAuthHeaders(),
         });
 
         if (!response.ok) {
