@@ -16,6 +16,7 @@
       @login="showLoginDialog = true"
       @logout="handleLogout"
       @showShareList="showShareListDialog = true"
+      @showAdminTools="showAdminTools = true"
     />
 
     <!-- Main Content -->
@@ -159,6 +160,12 @@
       @close="showShareListDialog = false"
       @toast="handleToast"
       @confirm="showConfirm"
+    />
+
+    <!-- Admin Tools Dialog -->
+    <AdminTools
+      v-model="showAdminTools"
+      @toast="handleToast"
     />
 
     <!-- Input Dialog -->
@@ -323,6 +330,7 @@ import UploadPopup from "./UploadPopup.vue";
 import LoginDialog from "./LoginDialog.vue";
 import ShareDialog from "./ShareDialog.vue";
 import ShareListDialog from "./ShareListDialog.vue";
+import AdminTools from "./AdminTools.vue";
 import InputDialog from "./InputDialog.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import Toast from "./Toast.vue";
@@ -380,6 +388,9 @@ export default {
 
     // Share List (admin)
     showShareListDialog: false,
+
+    // Admin Tools
+    showAdminTools: false,
 
     // Guest Upload Password
     guestUploadPassword: localStorage.getItem('guest_upload_password') || '',
@@ -1409,6 +1420,7 @@ export default {
     LoginDialog,
     ShareDialog,
     ShareListDialog,
+    AdminTools,
     InputDialog,
     ConfirmDialog,
     Toast,
