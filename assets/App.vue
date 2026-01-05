@@ -292,6 +292,7 @@
     <FilePreview
       v-model="showFilePreview"
       :fileUrl="previewFileUrl"
+      :fetchUrl="previewFetchUrl"
       :fileName="previewFileName"
       :contentType="previewContentType"
     />
@@ -410,6 +411,7 @@ export default {
     // File Preview
     showFilePreview: false,
     previewFileUrl: '',
+    previewFetchUrl: '',  // 用于 fetch 内容，避免 CORS
     previewFileName: '',
     previewContentType: '',
   }),
@@ -955,11 +957,14 @@ export default {
       // 如果传入的是文件对象
       if (typeof file === 'object') {
         this.previewFileUrl = this.getFileUrl(file.key);
+        // fetchUrl 始终使用 /raw/ 路由，避免 CORS 问题
+        this.previewFetchUrl = `/raw/${file.key}`;
         this.previewFileName = file.key?.split('/').pop() || '';
         this.previewContentType = file.httpMetadata?.contentType || '';
       } else {
         // 兼容旧的字符串 URL 调用
         this.previewFileUrl = file;
+        this.previewFetchUrl = file;
         this.previewFileName = file.split('/').pop() || '';
         this.previewContentType = '';
       }
@@ -984,7 +989,9 @@ export default {
 
           const thumbnailUploadUrl = `/api/write/items/_$flaredrive$/thumbnails/${digestHex}.png`;
           try {
-            await axios.put(thumbnailUploadUrl, thumbnailBlob);
+            await axios.put(thumbnailUploadUrl, thumbnailBlob, {
+              headers: { 'Content-Type': 'image/png' }
+            });
             thumbnailDigest = digestHex;
           } catch (error) {
             fetch("/api/write/")

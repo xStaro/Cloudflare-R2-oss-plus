@@ -404,6 +404,11 @@ export default {
       type: String,
       required: true
     },
+    // 用于 fetch 文件内容的 URL（避免 CORS，使用 /raw/ 路由）
+    fetchUrl: {
+      type: String,
+      default: ''
+    },
     fileName: {
       type: String,
       default: ''
@@ -454,6 +459,10 @@ export default {
   computed: {
     fileType() {
       return getFileType(this.fileName, this.contentType);
+    },
+    // 用于 fetch 内容的 URL（优先使用 fetchUrl 避免 CORS）
+    contentFetchUrl() {
+      return this.fetchUrl || this.fileUrl;
     }
   },
   watch: {
@@ -543,7 +552,7 @@ export default {
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfjsWorker;
 
       this.loadingText = '加载 PDF 文件...';
-      const loadingTask = window.pdfjsLib.getDocument(this.fileUrl);
+      const loadingTask = window.pdfjsLib.getDocument(this.contentFetchUrl);
       this.pdfDoc = await loadingTask.promise;
       this.pdfTotalPages = this.pdfDoc.numPages;
       this.pdfCurrentPage = 1;
@@ -611,7 +620,7 @@ export default {
       ]);
 
       this.loadingText = '加载文件内容...';
-      const response = await fetch(this.fileUrl);
+      const response = await fetch(this.contentFetchUrl);
       const text = await response.text();
 
       // Configure marked
@@ -636,7 +645,7 @@ export default {
       await loadScript(CDN.xlsx);
 
       this.loadingText = '加载文件内容...';
-      const response = await fetch(this.fileUrl);
+      const response = await fetch(this.contentFetchUrl);
       const arrayBuffer = await response.arrayBuffer();
 
       this.excelWorkbook = window.XLSX.read(arrayBuffer, { type: 'array' });
@@ -665,7 +674,7 @@ export default {
       await loadScript(CDN.mammoth);
 
       this.loadingText = '加载文件内容...';
-      const response = await fetch(this.fileUrl);
+      const response = await fetch(this.contentFetchUrl);
       const arrayBuffer = await response.arrayBuffer();
 
       const result = await window.mammoth.convertToHtml({ arrayBuffer });
@@ -687,7 +696,7 @@ export default {
       ]);
 
       this.loadingText = '加载文件内容...';
-      const response = await fetch(this.fileUrl);
+      const response = await fetch(this.contentFetchUrl);
       const text = await response.text();
 
       this.rawCodeContent = text;
