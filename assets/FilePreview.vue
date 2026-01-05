@@ -483,6 +483,21 @@ export default {
       this.$emit('update:modelValue', false);
     },
 
+    // 获取认证头
+    getAuthHeaders() {
+      const headers = {};
+      const credentials = localStorage.getItem('auth_credentials');
+      if (credentials) {
+        headers['Authorization'] = `Basic ${credentials}`;
+      }
+      return headers;
+    },
+
+    // 带认证的 fetch
+    async authFetch(url) {
+      return fetch(url, { headers: this.getAuthHeaders() });
+    },
+
     reset() {
       this.loading = true;
       this.loadingText = '加载中...';
@@ -552,7 +567,10 @@ export default {
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfjsWorker;
 
       this.loadingText = '加载 PDF 文件...';
-      const loadingTask = window.pdfjsLib.getDocument(this.contentFetchUrl);
+      const loadingTask = window.pdfjsLib.getDocument({
+        url: this.contentFetchUrl,
+        httpHeaders: this.getAuthHeaders(),
+      });
       this.pdfDoc = await loadingTask.promise;
       this.pdfTotalPages = this.pdfDoc.numPages;
       this.pdfCurrentPage = 1;
@@ -620,7 +638,10 @@ export default {
       ]);
 
       this.loadingText = '加载文件内容...';
-      const response = await fetch(this.contentFetchUrl);
+      const response = await this.authFetch(this.contentFetchUrl);
+      if (!response.ok) {
+        throw new Error(response.status === 403 ? '无权访问此文件' : '加载失败');
+      }
       const text = await response.text();
 
       // Configure marked
@@ -645,7 +666,10 @@ export default {
       await loadScript(CDN.xlsx);
 
       this.loadingText = '加载文件内容...';
-      const response = await fetch(this.contentFetchUrl);
+      const response = await this.authFetch(this.contentFetchUrl);
+      if (!response.ok) {
+        throw new Error(response.status === 403 ? '无权访问此文件' : '加载失败');
+      }
       const arrayBuffer = await response.arrayBuffer();
 
       this.excelWorkbook = window.XLSX.read(arrayBuffer, { type: 'array' });
@@ -674,7 +698,10 @@ export default {
       await loadScript(CDN.mammoth);
 
       this.loadingText = '加载文件内容...';
-      const response = await fetch(this.contentFetchUrl);
+      const response = await this.authFetch(this.contentFetchUrl);
+      if (!response.ok) {
+        throw new Error(response.status === 403 ? '无权访问此文件' : '加载失败');
+      }
       const arrayBuffer = await response.arrayBuffer();
 
       const result = await window.mammoth.convertToHtml({ arrayBuffer });
@@ -696,7 +723,10 @@ export default {
       ]);
 
       this.loadingText = '加载文件内容...';
-      const response = await fetch(this.contentFetchUrl);
+      const response = await this.authFetch(this.contentFetchUrl);
+      if (!response.ok) {
+        throw new Error(response.status === 403 ? '无权访问此文件' : '加载失败');
+      }
       const text = await response.text();
 
       this.rawCodeContent = text;
