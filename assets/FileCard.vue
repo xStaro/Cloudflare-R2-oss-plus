@@ -207,10 +207,20 @@ export default {
       return contentType.startsWith('image/') || contentType.startsWith('video/');
     },
     thumbnailUrl() {
+      // 优先使用上传时生成的缩略图
+      const thumbnailHash = this.file.customMetadata?.thumbnail;
+      if (thumbnailHash) {
+        // 缩略图存储在 _$flaredrive$/thumbnails/{hash}.png
+        if (this.fileBaseUrl) {
+          return `${this.fileBaseUrl}/_$flaredrive$/thumbnails/${thumbnailHash}.png`;
+        }
+        return `/raw/_$flaredrive$/thumbnails/${thumbnailHash}.png`;
+      }
+
+      // 如果没有缩略图但是图片，使用原图作为缩略图
       if (!this.canPreview) return null;
       const contentType = this.file.httpMetadata?.contentType || '';
       if (contentType.startsWith('image/')) {
-        // 如果配置了 CDN 回源地址，使用 CDN；否则使用 /raw/ 路由
         if (this.fileBaseUrl) {
           return `${this.fileBaseUrl}/${this.file.key}`;
         }
