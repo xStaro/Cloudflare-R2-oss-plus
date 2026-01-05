@@ -103,7 +103,7 @@
           :selected="isSelected(file.key)"
           :selectionMode="selectionMode"
           :fileBaseUrl="fileBaseUrl"
-          @click="preview(getFileUrl(file.key))"
+          @click="preview(file)"
           @select="toggleSelect(file.key)"
           @contextmenu="showContextMenuFor($event, file)"
         />
@@ -287,6 +287,14 @@
 
     <!-- Toast -->
     <Toast ref="toast" />
+
+    <!-- File Preview -->
+    <FilePreview
+      v-model="showFilePreview"
+      :fileUrl="previewFileUrl"
+      :fileName="previewFileName"
+      :contentType="previewContentType"
+    />
   </div>
 </template>
 
@@ -317,6 +325,7 @@ import ShareListDialog from "./ShareListDialog.vue";
 import InputDialog from "./InputDialog.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import Toast from "./Toast.vue";
+import FilePreview from "./FilePreview.vue";
 
 export default {
   data: () => ({
@@ -397,6 +406,12 @@ export default {
       type: 'warning',
       callback: null,
     },
+
+    // File Preview
+    showFilePreview: false,
+    previewFileUrl: '',
+    previewFileName: '',
+    previewContentType: '',
   }),
 
   computed: {
@@ -936,8 +951,19 @@ export default {
       fileElement.value = null;
     },
 
-    preview(filePath) {
-      window.open(filePath);
+    preview(file) {
+      // 如果传入的是文件对象
+      if (typeof file === 'object') {
+        this.previewFileUrl = this.getFileUrl(file.key);
+        this.previewFileName = file.key?.split('/').pop() || '';
+        this.previewContentType = file.httpMetadata?.contentType || '';
+      } else {
+        // 兼容旧的字符串 URL 调用
+        this.previewFileUrl = file;
+        this.previewFileName = file.split('/').pop() || '';
+        this.previewContentType = '';
+      }
+      this.showFilePreview = true;
     },
 
     async processUploadQueue() {
@@ -1379,6 +1405,7 @@ export default {
     InputDialog,
     ConfirmDialog,
     Toast,
+    FilePreview,
   },
 };
 </script>

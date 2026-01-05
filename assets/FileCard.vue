@@ -54,6 +54,27 @@
         <path d="M10 12h4"/>
         <path d="M10 16h4"/>
       </svg>
+      <!-- Word Icon -->
+      <svg v-else-if="fileIcon === 'word'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <path d="M14 2v6h6"/>
+        <path d="M8 13h8"/>
+        <path d="M8 17h8"/>
+        <path d="M8 9h2"/>
+      </svg>
+      <!-- Excel Icon -->
+      <svg v-else-if="fileIcon === 'excel'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <path d="M3 9h18"/>
+        <path d="M3 15h18"/>
+        <path d="M9 3v18"/>
+      </svg>
+      <!-- PowerPoint Icon -->
+      <svg v-else-if="fileIcon === 'ppt'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <path d="M14 2v6h6"/>
+        <rect x="8" y="12" width="8" height="6" rx="1"/>
+      </svg>
       <!-- Archive Icon -->
       <svg v-else-if="fileIcon === 'archive'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="21 8 21 21 3 21 3 8"/>
@@ -323,6 +344,9 @@ export default {
 .file-card-icon.video svg { color: #ef4444; }
 .file-card-icon.audio svg { color: #8b5cf6; }
 .file-card-icon.pdf svg { color: #ef4444; }
+.file-card-icon.word svg { color: #2563eb; }
+.file-card-icon.excel svg { color: #16a34a; }
+.file-card-icon.ppt svg { color: #ea580c; }
 .file-card-icon.archive svg { color: #f59e0b; }
 .file-card-icon.text svg { color: #10b981; }
 
