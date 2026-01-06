@@ -23,6 +23,7 @@
   - [CDN 回源配置](#cdn-回源配置可选)
 - [使用指南](#-使用指南)
   - [分享管理](#分享管理管理员功能)
+  - [API Key 管理](#api-key-管理管理员功能)
 - [本地开发](#-本地开发)
 - [项目结构](#-项目结构)
 - [常见问题](#-常见问题)
@@ -79,6 +80,7 @@
 | 🔐 **目录授权** | 为不同用户分配不同目录权限 |
 | 👁️ **只读用户** | 支持只能查看和下载的只读账户 |
 | 👥 **访客模式** | 可配置访客可访问的目录（仅查看） |
+| 🔑 **API Key** | 支持创建 API 密钥，用于程序化访问（如 PicGo 图床） |
 | 🎨 **现代化登录** | 自定义登录界面，非浏览器弹窗 |
 | 🛠️ **管理工具** | 管理员专属工具（清理孤立缩略图等） |
 
@@ -551,6 +553,71 @@ wget --content-disposition "https://your-domain.com/s/abc123/download?pwd=mypass
 
 > 💡 **提示**：缩略图使用内容哈希命名，相同内容的图片共享同一个缩略图，因此清理是安全的。
 
+### API Key 管理（管理员功能）
+
+API Key 允许第三方应用程序（如 PicGo 图床、备份脚本等）通过 API 访问你的网盘，无需使用用户名密码。
+
+#### 打开 API Key 管理
+1. 以管理员身份登录
+2. 点击顶部导航栏的用户头像
+3. 在下拉菜单中点击 **API Key**
+
+#### 创建 API Key
+1. 点击 **新建密钥** 按钮
+2. 填写密钥信息：
+   - **名称**：用于识别密钥用途（如"PicGo图床"、"备份脚本"）
+   - **权限**：选择"全部目录"或指定目录（多个目录用逗号分隔）
+   - **只读**：勾选后该密钥只能下载，不能上传/删除
+   - **有效期**：永久 / 7天 / 30天 / 90天 / 1年
+3. 点击 **创建**
+4. **立即复制**生成的密钥（关闭后无法再次查看！）
+
+#### API Key 使用方式
+
+支持两种认证方式：
+
+**方式一：Bearer Token（推荐）**
+```bash
+curl -X PUT "https://your-domain.com/api/write/items/images/photo.jpg" \
+  -H "Authorization: Bearer sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Content-Type: image/jpeg" \
+  --data-binary @photo.jpg
+```
+
+**方式二：X-API-Key 头**
+```bash
+curl -X PUT "https://your-domain.com/api/write/items/images/photo.jpg" \
+  -H "X-API-Key: sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Content-Type: image/jpeg" \
+  --data-binary @photo.jpg
+```
+
+#### PicGo 图床配置示例
+
+在 PicGo 中使用"自定义 Web 图床"插件：
+
+| 配置项 | 值 |
+|-------|-----|
+| API 地址 | `https://your-domain.com/api/write/items/` |
+| POST 参数名 | `file` |
+| JSON 路径 | `key` |
+| 自定义请求头 | `{"Authorization": "Bearer sk-xxx"}` |
+| 自定义Body | `{}` |
+| 自定义URL前缀 | `https://your-domain.com/raw/` |
+
+#### 管理 API Key
+- **启用/禁用**：临时禁用密钥而不删除
+- **编辑**：修改权限和只读设置
+- **删除**：永久删除密钥
+
+#### 密钥状态说明
+| 状态 | 说明 |
+|------|------|
+| 正常 | 密钥可正常使用 |
+| 已禁用 | 密钥被管理员禁用 |
+| 已过期 | 密钥已超过有效期 |
+| 只读 | 密钥只能下载，不能上传/删除 |
+
 ---
 
 ## 🔧 本地开发
@@ -606,6 +673,7 @@ Cloudflare-R2-oss/
 │   ├── ShareDialog.vue    # 分享对话框
 │   ├── ShareListDialog.vue # 分享列表对话框
 │   ├── AdminTools.vue     # 管理工具对话框
+│   ├── ApiKeyDialog.vue   # API Key 管理对话框
 │   ├── FilePreview.vue    # 文件预览组件
 │   ├── InputDialog.vue    # 输入对话框
 │   ├── ConfirmDialog.vue  # 确认对话框
@@ -624,6 +692,7 @@ Cloudflare-R2-oss/
 │   │   ├── config.ts      # 配置 API
 │   │   ├── stats.ts       # 统计 API
 │   │   ├── cleanup-thumbnails.ts # 缩略图清理 API
+│   │   ├── apikeys/       # API Key 管理 API
 │   │   ├── children/      # 文件列表 API
 │   │   ├── share/         # 分享管理 API
 │   │   └── write/         # 文件操作 API
@@ -632,6 +701,7 @@ Cloudflare-R2-oss/
 │       └── [id].ts        # 分享详情页
 ├── utils/                  # 工具函数
 │   ├── auth.ts            # 权限验证
+│   ├── apikey.ts          # API Key 工具函数
 │   └── share.ts           # 分享工具
 ├── docs/                   # 文档资源
 │   └── images/            # 截图图片
@@ -754,6 +824,7 @@ Cloudflare-R2-oss/
 
 ### 最近更新
 
+- **API Key 管理**：支持创建 API 密钥用于程序化访问，可配置权限和有效期
 - **文件预览**：支持 PDF、Excel、Word、Markdown、代码等格式在线预览
 - **管理工具**：新增孤立缩略图清理功能
 - **Bug 修复**：修复缩略图 Content-Type、CORS 跨域、权限验证等问题
