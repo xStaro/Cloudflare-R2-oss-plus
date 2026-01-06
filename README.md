@@ -594,16 +594,39 @@ curl -X PUT "https://your-domain.com/api/write/items/images/photo.jpg" \
 
 #### PicGo 图床配置示例
 
-在 PicGo 中使用"自定义 Web 图床"插件：
+推荐使用 PicGo 的 **web-uploader** 或 **custom-uploader** 插件：
 
-| 配置项 | 值 |
-|-------|-----|
-| API 地址 | `https://your-domain.com/api/write/items/` |
-| POST 参数名 | `file` |
-| JSON 路径 | `key` |
-| 自定义请求头 | `{"Authorization": "Bearer sk-xxx"}` |
-| 自定义Body | `{}` |
-| 自定义URL前缀 | `https://your-domain.com/raw/` |
+| 配置项 | 值 | 说明 |
+|-------|-----|------|
+| **API 地址** | `https://your-domain.com/api/upload?path=images` | `path` 参数指定上传目录 |
+| **请求方式** | `POST` | |
+| **文件字段名** | `file` | |
+| **自定义请求头** | `{"Authorization": "Bearer sk-xxx"}` | 或 `{"X-API-Key": "sk-xxx"}` |
+| **JSON 路径** | `url` | 返回的图片 URL |
+
+**配置说明：**
+
+1. **API 地址**：`https://your-domain.com/api/upload?path=目录名`
+   - `path` 参数对应你创建 API Key 时设置的目录权限
+   - 例如权限设置为 `images`，则 `path=images`
+   - 如果权限是"全部目录"，`path` 可以是任意目录
+
+2. **请求头**：使用你创建的 API Key
+   ```json
+   {"Authorization": "Bearer sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+   ```
+
+3. **返回格式**：接口返回 JSON 格式
+   ```json
+   {
+     "success": true,
+     "url": "https://pub-xxx.r2.dev/images/photo.jpg",
+     "key": "images/photo.jpg",
+     "size": 12345
+   }
+   ```
+
+> ⚠️ **注意**：确保 API Key 的目录权限与 `path` 参数匹配，且未勾选"只读"选项。
 
 #### 管理 API Key
 - **启用/禁用**：临时禁用密钥而不删除
