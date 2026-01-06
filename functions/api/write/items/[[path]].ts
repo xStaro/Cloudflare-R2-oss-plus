@@ -1,5 +1,5 @@
 import { notFound, parseBucketPath } from "@/utils/bucket";
-import {get_auth_status} from "@/utils/auth";
+import { getWriteAuthStatusAsync } from "@/utils/auth";
 
 export async function onRequestPostCreateMultipart(context) {
   const [bucket, path] = parseBucketPath(context);
@@ -89,12 +89,13 @@ export async function onRequestPutMultipart(context) {
 }
 
 export async function onRequestPut(context) {
-  if(!get_auth_status(context)){
+  const hasPermission = await getWriteAuthStatusAsync(context);
+  if (!hasPermission) {
     return new Response(JSON.stringify({ error: "没有操作权限" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
     });
-   }
+  }
   const url = new URL(context.request.url);
 
   if (new URLSearchParams(url.search).has("uploadId")) {
@@ -143,12 +144,13 @@ export async function onRequestPut(context) {
 }
 
 export async function onRequestDelete(context) {
-  if(!get_auth_status(context)){
+  const hasPermission = await getWriteAuthStatusAsync(context);
+  if (!hasPermission) {
     return new Response(JSON.stringify({ error: "没有操作权限" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },
     });
-   }
+  }
   const [bucket, path] = parseBucketPath(context);
   if (!bucket) return notFound();
 

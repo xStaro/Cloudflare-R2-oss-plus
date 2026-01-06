@@ -17,6 +17,7 @@
       @logout="handleLogout"
       @showShareList="showShareListDialog = true"
       @showAdminTools="showAdminTools = true"
+      @showApiKeys="showApiKeyDialog = true"
     />
 
     <!-- Main Content -->
@@ -165,6 +166,12 @@
     <!-- Admin Tools Dialog -->
     <AdminTools
       v-model="showAdminTools"
+      @toast="handleToast"
+    />
+
+    <!-- API Key Dialog -->
+    <ApiKeyDialog
+      v-model="showApiKeyDialog"
       @toast="handleToast"
     />
 
@@ -331,6 +338,7 @@ import LoginDialog from "./LoginDialog.vue";
 import ShareDialog from "./ShareDialog.vue";
 import ShareListDialog from "./ShareListDialog.vue";
 import AdminTools from "./AdminTools.vue";
+import ApiKeyDialog from "./ApiKeyDialog.vue";
 import InputDialog from "./InputDialog.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import Toast from "./Toast.vue";
@@ -391,6 +399,9 @@ export default {
 
     // Admin Tools
     showAdminTools: false,
+
+    // API Key Dialog
+    showApiKeyDialog: false,
 
     // Guest Upload Password
     guestUploadPassword: localStorage.getItem('guest_upload_password') || '',
@@ -1421,6 +1432,7 @@ export default {
     ShareDialog,
     ShareListDialog,
     AdminTools,
+    ApiKeyDialog,
     InputDialog,
     ConfirmDialog,
     Toast,

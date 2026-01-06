@@ -1,5 +1,4 @@
-import { INTERNAL_PREFIX, THUMBNAILS_PATH } from "@/utils/auth";
-import { isAdminUser } from "@/utils/auth";
+import { INTERNAL_PREFIX, THUMBNAILS_PATH, isAdminUserAsync } from "@/utils/auth";
 
 interface Env {
   BUCKET: R2Bucket;
@@ -27,8 +26,9 @@ const LIST_PAGE_SIZE = 1000;
  * 3. 删除不在使用列表中的缩略图
  */
 export const onRequestPost: PagesFunction<Env> = async (context) => {
-  // 检查管理员权限
-  if (!isAdminUser(context)) {
+  // 检查管理员权限（支持 API Key）
+  const isAdmin = await isAdminUserAsync(context);
+  if (!isAdmin) {
     return new Response(JSON.stringify({ error: "需要管理员权限" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
@@ -149,8 +149,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
 // GET 请求：返回当前状态（预览模式）
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  // 检查管理员权限
-  if (!isAdminUser(context)) {
+  // 检查管理员权限（支持 API Key）
+  const isAdmin = await isAdminUserAsync(context);
+  if (!isAdmin) {
     return new Response(JSON.stringify({ error: "需要管理员权限" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
