@@ -298,18 +298,49 @@ export async function authenticateWithApiKey(kv: KVNamespace, key: string): Prom
 }
 
 /**
+ * 标准化路径，防止路径遍历攻击
+ */
+function normalizePath(path: string): string {
+  return path
+    .replace(/\\/g, '/')           // 统一路径分隔符
+    .replace(/\/+/g, '/')          // 合并多个斜杠
+    .replace(/^\//, '')            // 移除开头斜杠
+    .replace(/\/$/, '');           // 移除结尾斜杠
+}
+
+/**
+ * 检查路径是否安全（不包含路径遍历字符）
+ */
+function isPathSafe(path: string): boolean {
+  // 检查是否包含危险字符
+  if (path.includes('..') || path.includes('\0')) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * 检查 API Key 是否有路径权限
  */
 export function checkApiKeyPathPermission(apiKey: ApiKey, path: string): boolean {
+  // 安全检查
+  if (!isPathSafe(path)) {
+    return false;
+  }
+
+  const normalizedPath = normalizePath(path);
+
   for (const perm of apiKey.permissions) {
     const trimmed = perm.trim();
     if (trimmed === '*') {
       return true;
     }
-    // 移除开头的 / 进行比较
-    const normalizedPerm = trimmed.replace(/^\//, '');
-    const normalizedPath = path.replace(/^\//, '');
-    if (normalizedPath.startsWith(normalizedPerm)) {
+
+    const normalizedPerm = normalizePath(trimmed);
+
+    // 精确匹配或前缀匹配（确保是目录边界）
+    if (normalizedPath === normalizedPerm ||
+        normalizedPath.startsWith(normalizedPerm + '/')) {
       return true;
     }
   }

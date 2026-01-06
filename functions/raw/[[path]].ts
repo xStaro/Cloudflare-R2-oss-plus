@@ -1,35 +1,60 @@
 import { notFound, parseBucketPath } from "@/utils/bucket";
-import { decodeBasicAuth, getGuestDirs, THUMBNAILS_PATH } from "@/utils/auth";
+import { decodeBasicAuth, getGuestDirs, THUMBNAILS_PATH, extractApiKeyFromHeaders } from "@/utils/auth";
 
-// 解析用户权限
-function parseUserPermissions(env: any, authHeader: string | null): {
+// 解析用户权限（支持 Basic Auth 和 API Key）
+async function parseUserPermissions(env: any, headers: Headers): Promise<{
   isAdmin: boolean;
   allowedPaths: string[];
-} {
+  isReadonly: boolean;
+}> {
   const guestDirs = getGuestDirs(env);
 
+  // 1. 优先检查 API Key
+  const apiKey = extractApiKeyFromHeaders(headers);
+  if (apiKey) {
+    const { validateApiKey } = await import("@/utils/apikey");
+    const result = await validateApiKey(env.ossShares, apiKey);
+
+    if (result.valid && result.apiKey) {
+      const isAdmin = result.apiKey.permissions.includes('*');
+      if (isAdmin) {
+        return { isAdmin: true, allowedPaths: [], isReadonly: result.apiKey.isReadonly };
+      }
+
+      // 标准化权限路径
+      const allowedPaths = result.apiKey.permissions
+        .filter((p: string) => p !== '*')
+        .map((p: string) => p.replace(/^\//, '').replace(/\/$/, ''));
+
+      return { isAdmin: false, allowedPaths, isReadonly: result.apiKey.isReadonly };
+    }
+  }
+
+  // 2. 回退到 Basic Auth
+  const authHeader = headers.get('Authorization');
   const credentials = decodeBasicAuth(authHeader || '');
   if (!credentials) {
-    return { isAdmin: false, allowedPaths: guestDirs };
+    return { isAdmin: false, allowedPaths: guestDirs, isReadonly: true };
   }
 
   const userPerms = env[credentials.account];
   if (!userPerms) {
-    return { isAdmin: false, allowedPaths: guestDirs };
+    return { isAdmin: false, allowedPaths: guestDirs, isReadonly: true };
   }
 
   const permissions = userPerms.split(',').map((p: string) => p.trim()).filter(Boolean);
   const isAdmin = permissions.includes('*');
+  const isReadonly = permissions.includes('readonly');
 
   if (isAdmin) {
-    return { isAdmin: true, allowedPaths: [] };
+    return { isAdmin: true, allowedPaths: [], isReadonly };
   }
 
   const allowedPaths = permissions.filter((p: string) =>
     p !== 'readonly' && p.startsWith('/')
   ).map((p: string) => p.replace(/^\//, ''));
 
-  return { isAdmin: false, allowedPaths };
+  return { isAdmin: false, allowedPaths, isReadonly };
 }
 
 // 检查文件路径是否在允许的范围内
@@ -72,9 +97,9 @@ export async function onRequestGet(context) {
     return notFound();
   }
 
-  // 权限检查
-  const authHeader = context.request.headers.get('Authorization');
-  const { isAdmin, allowedPaths } = parseUserPermissions(context.env, authHeader);
+  // 权限检查（支持 API Key）
+  const headers = new Headers(context.request.headers);
+  const { isAdmin, allowedPaths } = await parseUserPermissions(context.env, headers);
 
   const decodedPath = decodeURIComponent(filePath);
   if (!isFileAllowed(decodedPath, allowedPaths, isAdmin)) {

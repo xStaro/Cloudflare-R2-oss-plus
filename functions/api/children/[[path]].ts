@@ -1,15 +1,38 @@
 import { notFound, parseBucketPath } from "@/utils/bucket";
-import { decodeBasicAuth, getGuestDirs, INTERNAL_PREFIX, FOLDER_MARKER } from "@/utils/auth";
+import { decodeBasicAuth, getGuestDirs, INTERNAL_PREFIX, FOLDER_MARKER, extractApiKeyFromHeaders } from "@/utils/auth";
 
-// 解析用户权限（用于文件列表访问）
-function parseUserPermissions(env: any, authHeader: string | null): {
+// 解析用户权限（支持 Basic Auth 和 API Key）
+async function parseUserPermissions(env: any, headers: Headers): Promise<{
   isAuthenticated: boolean;
   isAdmin: boolean;
   isGuest: boolean;
   allowedPaths: string[];
-} {
+}> {
   const guestDirs = getGuestDirs(env);
 
+  // 1. 优先检查 API Key
+  const apiKey = extractApiKeyFromHeaders(headers);
+  if (apiKey) {
+    const { validateApiKey } = await import("@/utils/apikey");
+    const result = await validateApiKey(env.ossShares, apiKey);
+
+    if (result.valid && result.apiKey) {
+      const isAdmin = result.apiKey.permissions.includes('*');
+      if (isAdmin) {
+        return { isAuthenticated: true, isAdmin: true, isGuest: false, allowedPaths: [] };
+      }
+
+      // 标准化权限路径
+      const allowedPaths = result.apiKey.permissions
+        .filter((p: string) => p !== '*')
+        .map((p: string) => p.replace(/^\//, '').replace(/\/$/, ''));
+
+      return { isAuthenticated: true, isAdmin: false, isGuest: false, allowedPaths };
+    }
+  }
+
+  // 2. 回退到 Basic Auth
+  const authHeader = headers.get('Authorization');
   const credentials = decodeBasicAuth(authHeader || '');
   if (!credentials) {
     return {
@@ -115,9 +138,9 @@ export async function onRequestGet(context) {
     const prefix = normalizedPath ? `${normalizedPath}/` : '';
     if (!bucket || normalizedPath.startsWith(INTERNAL_PREFIX)) return notFound();
 
-    // 权限检查
-    const authHeader = context.request.headers.get('Authorization');
-    const { isAdmin, allowedPaths } = parseUserPermissions(context.env, authHeader);
+    // 权限检查（支持 API Key）
+    const headers = new Headers(context.request.headers);
+    const { isAdmin, allowedPaths } = await parseUserPermissions(context.env, headers);
 
     // 检查是否有权限访问当前路径
     if (!isPathAllowed(normalizedPath, allowedPaths, isAdmin)) {

@@ -6,9 +6,41 @@
  * POST /api/upload?path=PicGo
  * Headers: Authorization: Bearer sk-xxx 或 X-API-Key: sk-xxx
  * Body: multipart/form-data, file 字段为文件
+ *
+ * 可选参数：
+ * - path: 上传目录
+ * - name: 自定义文件名
+ * - conflict: 文件冲突处理方式 (rename/overwrite/error)，默认 rename
+ * - timestamp: 是否使用时间戳重命名 (true/false)，默认 false
  */
 
 import { extractApiKeyFromHeaders, THUMBNAILS_PATH } from "@/utils/auth";
+
+/**
+ * 生成安全的文件名，移除危险字符
+ */
+function sanitizeFileName(fileName: string): string {
+  // 移除路径遍历字符和其他危险字符
+  return fileName
+    .replace(/\.\./g, '')
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
+    .replace(/^\.+/, '')
+    .trim();
+}
+
+/**
+ * 生成时间戳文件名
+ */
+function generateTimestampFileName(originalName: string): string {
+  const timestamp = Date.now();
+  const lastDotIndex = originalName.lastIndexOf('.');
+  if (lastDotIndex === -1) {
+    return `${originalName}_${timestamp}`;
+  }
+  const nameWithoutExt = originalName.substring(0, lastDotIndex);
+  const ext = originalName.substring(lastDotIndex);
+  return `${nameWithoutExt}_${timestamp}${ext}`;
+}
 
 export async function onRequestPost(context: any) {
   const { request, env } = context;
@@ -27,6 +59,14 @@ export async function onRequestPost(context: any) {
 
   // 移除开头和结尾的斜杠，标准化路径
   uploadPath = uploadPath.replace(/^\/+|\/+$/g, "");
+
+  // 安全检查：防止路径遍历
+  if (uploadPath.includes('..') || uploadPath.includes('\0')) {
+    return new Response(JSON.stringify({ success: false, error: "非法路径" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   // 验证 API Key
   const headers = new Headers(request.headers);
@@ -86,19 +126,58 @@ export async function onRequestPost(context: any) {
     });
   }
 
-  // 生成文件名（保留原始文件名，或使用时间戳）
-  let fileName = file.name;
+  // 生成文件名
+  let fileName = sanitizeFileName(file.name);
+  if (!fileName) {
+    fileName = `file_${Date.now()}`;
+  }
 
-  // 如果需要重命名（可选参数）
+  // 如果需要自定义文件名
   const customName = url.searchParams.get("name");
   if (customName) {
-    // 保留原始扩展名
-    const ext = fileName.substring(fileName.lastIndexOf("."));
-    fileName = customName.includes(".") ? customName : customName + ext;
+    const sanitizedCustomName = sanitizeFileName(customName);
+    if (sanitizedCustomName) {
+      // 保留原始扩展名（如果自定义名称没有扩展名）
+      const lastDotIndex = fileName.lastIndexOf('.');
+      const ext = lastDotIndex !== -1 ? fileName.substring(lastDotIndex) : '';
+      fileName = sanitizedCustomName.includes('.') ? sanitizedCustomName : sanitizedCustomName + ext;
+    }
+  }
+
+  // 是否使用时间戳重命名
+  const useTimestamp = url.searchParams.get("timestamp") === "true";
+  if (useTimestamp) {
+    fileName = generateTimestampFileName(fileName);
   }
 
   // 构建完整路径
-  const fullPath = uploadPath ? `${uploadPath}/${fileName}` : fileName;
+  let fullPath = uploadPath ? `${uploadPath}/${fileName}` : fileName;
+
+  // 文件冲突处理
+  const conflictAction = url.searchParams.get("conflict") || "rename"; // rename, overwrite, error
+
+  try {
+    const existingFile = await bucket.head(fullPath);
+    if (existingFile) {
+      if (conflictAction === "error") {
+        return new Response(JSON.stringify({
+          success: false,
+          error: "文件已存在",
+          existingFile: fullPath
+        }), {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        });
+      } else if (conflictAction === "rename") {
+        // 自动添加时间戳重命名
+        fileName = generateTimestampFileName(fileName);
+        fullPath = uploadPath ? `${uploadPath}/${fileName}` : fileName;
+      }
+      // overwrite 情况下直接覆盖，无需额外处理
+    }
+  } catch (e) {
+    // head 操作失败，文件可能不存在，继续上传
+  }
 
   // 上传到 R2
   try {
