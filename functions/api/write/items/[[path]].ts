@@ -48,6 +48,14 @@ export async function onRequestPostCompleteMultipart(context) {
 }
 
 export async function onRequestPost(context) {
+  const hasPermission = await getWriteAuthStatusAsync(context);
+  if (!hasPermission) {
+    return new Response(JSON.stringify({ error: "没有操作权限" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const url = new URL(context.request.url);
   const searchParams = new URLSearchParams(url.search);
 

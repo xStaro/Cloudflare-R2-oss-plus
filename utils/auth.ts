@@ -156,9 +156,18 @@ export function extractApiKeyFromHeaders(headers: Headers): string | null {
 export async function getWriteAuthStatusAsync(context: any): Promise<boolean> {
   const url = context.request.url;
   const pathParts = url.split("/api/write/items/");
-  const dopath = pathParts.length > 1 ? pathParts[1] : null;
+  let dopath = pathParts.length > 1 ? pathParts[1] : null;
 
   if (!dopath) return false;
+
+  // 移除查询参数
+  const queryIndex = dopath.indexOf('?');
+  if (queryIndex !== -1) {
+    dopath = dopath.substring(0, queryIndex);
+  }
+
+  // URL 解码路径
+  dopath = decodeURIComponent(dopath);
 
   const headers = new Headers(context.request.headers);
 
@@ -234,9 +243,18 @@ export async function getWriteAuthStatusAsync(context: any): Promise<boolean> {
 export function getWriteAuthStatus(context: any): boolean {
   const url = context.request.url;
   const pathParts = url.split("/api/write/items/");
-  const dopath = pathParts.length > 1 ? pathParts[1] : null;
+  let dopath = pathParts.length > 1 ? pathParts[1] : null;
 
   if (!dopath) return false;
+
+  // 移除查询参数
+  const queryIndex = dopath.indexOf('?');
+  if (queryIndex !== -1) {
+    dopath = dopath.substring(0, queryIndex);
+  }
+
+  // URL 解码路径
+  dopath = decodeURIComponent(dopath);
 
   const headers = new Headers(context.request.headers);
   const authHeader = headers.get('Authorization');
