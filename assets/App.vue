@@ -250,6 +250,13 @@
             </svg>
             重命名
           </button>
+          <button class="context-menu-item" @click="editFocusedMarkdown" v-if="!isReadonly && isMarkdownFile(focusedItem)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+            </svg>
+            编辑 Markdown
+          </button>
           <a class="context-menu-item" :href="getFileUrl(focusedItem.key)" target="_blank" download @click="showContextMenu = false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -309,6 +316,19 @@
       :fetchUrl="previewFetchUrl"
       :fileName="previewFileName"
       :contentType="previewContentType"
+      :fileKey="previewFileKey"
+      :editable="!isReadonly"
+      @edit="handlePreviewEdit"
+    />
+
+    <!-- Markdown Editor -->
+    <MarkdownEditor
+      v-model="showMarkdownEditor"
+      :fileKey="markdownEditorFileKey"
+      :contentType="markdownEditorContentType"
+      :guestUploadPassword="guestUploadPassword"
+      @toast="handleToast"
+      @saved="handleMarkdownSaved"
     />
   </div>
 </template>
@@ -343,6 +363,7 @@ import InputDialog from "./InputDialog.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import Toast from "./Toast.vue";
 import FilePreview from "./FilePreview.vue";
+import MarkdownEditor from "./MarkdownEditor.vue";
 
 export default {
   data: () => ({
@@ -436,6 +457,12 @@ export default {
     previewFetchUrl: '',  // 用于 fetch 内容，避免 CORS
     previewFileName: '',
     previewContentType: '',
+    previewFileKey: '',
+
+    // Markdown Editor
+    showMarkdownEditor: false,
+    markdownEditorFileKey: '',
+    markdownEditorContentType: '',
   }),
 
   computed: {
@@ -983,14 +1010,70 @@ export default {
         this.previewFetchUrl = `/raw/${file.key}`;
         this.previewFileName = file.key?.split('/').pop() || '';
         this.previewContentType = file.httpMetadata?.contentType || '';
+        this.previewFileKey = file.key || '';
       } else {
         // 兼容旧的字符串 URL 调用
         this.previewFileUrl = file;
         this.previewFetchUrl = file;
         this.previewFileName = file.split('/').pop() || '';
         this.previewContentType = '';
+        this.previewFileKey = '';
       }
       this.showFilePreview = true;
+    },
+
+    isMarkdownFile(file) {
+      if (!file || typeof file !== 'object') return false;
+      const ext = getFileExtension(file.key);
+      return ['md', 'markdown', 'mdown', 'mkd'].includes(ext);
+    },
+
+    openMarkdownEditor(fileKey, contentType = '') {
+      if (!fileKey) return;
+      if (this.isReadonly) {
+        this.$refs.toast?.error('只读模式无法编辑');
+        return;
+      }
+
+      // 访客写入复用上传密码逻辑
+      if (this.currentUser?.isGuest && !this.guestUploadPassword) {
+        this.showInput({
+          title: '访客写入验证',
+          description: '请输入上传密码',
+          placeholder: '请输入密码',
+          hint: '访客写入需要提供密码验证',
+          icon: 'folder',
+          confirmText: '确认',
+          callback: (password) => {
+            if (!password) return;
+            this.guestUploadPassword = password;
+            localStorage.setItem('guest_upload_password', password);
+            this.openMarkdownEditor(fileKey, contentType);
+          }
+        });
+        return;
+      }
+
+      this.markdownEditorFileKey = fileKey;
+      this.markdownEditorContentType = contentType || '';
+      this.showMarkdownEditor = true;
+    },
+
+    editFocusedMarkdown() {
+      if (!this.focusedItem || typeof this.focusedItem !== 'object') return;
+      this.openMarkdownEditor(this.focusedItem.key, this.focusedItem.httpMetadata?.contentType || '');
+      this.showContextMenu = false;
+    },
+
+    handlePreviewEdit({ fileKey, contentType }) {
+      if (!fileKey) return;
+      this.showFilePreview = false;
+      this.openMarkdownEditor(fileKey, contentType || '');
+    },
+
+    handleMarkdownSaved() {
+      this.fetchFiles();
+      this.$refs.statsCards?.refresh();
     },
 
     async processUploadQueue() {
@@ -1437,6 +1520,7 @@ export default {
     ConfirmDialog,
     Toast,
     FilePreview,
+    MarkdownEditor,
   },
 };
 </script>
