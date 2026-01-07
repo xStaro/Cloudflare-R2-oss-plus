@@ -1,4 +1,5 @@
 import { INTERNAL_PREFIX, THUMBNAILS_PATH, isAdminUserAsync } from "@/utils/auth";
+import { parseBucketPath } from "@/utils/bucket";
 
 interface Env {
   BUCKET: R2Bucket;
@@ -35,7 +36,23 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     });
   }
 
-  const { BUCKET } = context.env;
+  const [BUCKET] = parseBucketPath(context);
+  if (!BUCKET) {
+    return new Response(JSON.stringify({ error: "存储桶未配置" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const isS3Backend = typeof (BUCKET as any).fetchObject === "function" || (BUCKET as any)?.backend === "s3";
+  if (isS3Backend) {
+    return new Response(JSON.stringify({
+      error: "S3 模式暂不支持清理孤立缩略图（ListObjects 不返回自定义元数据，无法安全判断引用关系）"
+    }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   const url = new URL(context.request.url);
   const dryRun = url.searchParams.has('dry-run');
 

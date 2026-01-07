@@ -1,4 +1,5 @@
 import { ShareData, verifyPassword, formatFileSize } from "@/utils/share";
+import { parseBucketPath } from "@/utils/bucket";
 
 interface Env {
   BUCKET: R2Bucket;
@@ -298,7 +299,8 @@ function generateExpiredPage(): string {
 // GET - 显示分享页面
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const shareId = context.params.id as string;
-  const origin = new URL(context.request.url).origin;
+  const requestUrl = new URL(context.request.url);
+  const origin = requestUrl.origin;
 
   try {
     const shareJson = await context.env.ossShares.get(`share:${shareId}`);
@@ -310,6 +312,13 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     }
 
     const share: ShareData = JSON.parse(shareJson);
+
+    // 多后端场景：确保在创建分享时的域名下访问
+    if (share.host && share.host !== requestUrl.hostname) {
+      const target = new URL(requestUrl.toString());
+      target.hostname = share.host;
+      return Response.redirect(target.toString(), 302);
+    }
 
     // 检查是否过期
     if (share.expiresAt && Date.now() > share.expiresAt) {
@@ -343,7 +352,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 // POST - 处理下载请求（验证密码后重定向到下载）
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const shareId = context.params.id as string;
-  const origin = new URL(context.request.url).origin;
+  const requestUrl = new URL(context.request.url);
+  const origin = requestUrl.origin;
 
   try {
     const shareJson = await context.env.ossShares.get(`share:${shareId}`);
@@ -355,6 +365,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     const share: ShareData = JSON.parse(shareJson);
+
+    // 多后端场景：确保在创建分享时的域名下访问（保持 POST 方法）
+    if (share.host && share.host !== requestUrl.hostname) {
+      const target = new URL(requestUrl.toString());
+      target.hostname = share.host;
+      return Response.redirect(target.toString(), 307);
+    }
 
     // 检查是否过期
     if (share.expiresAt && Date.now() > share.expiresAt) {
@@ -396,7 +413,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     await context.env.ossShares.put(`share:${shareId}`, JSON.stringify(share), kvOptions);
 
     // 获取文件并返回
-    const bucket = context.env.BUCKET;
+    const [bucket] = parseBucketPath(context);
+    if (!bucket || typeof bucket.get !== "function") {
+      return new Response('存储桶未配置', { status: 500 });
+    }
     const obj = await bucket.get(share.key);
 
     if (!obj) {

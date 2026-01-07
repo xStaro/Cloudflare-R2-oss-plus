@@ -138,13 +138,16 @@ export async function onRequestGet(context) {
     const prefix = normalizedPath ? `${normalizedPath}/` : '';
     if (!bucket || normalizedPath.startsWith(INTERNAL_PREFIX)) return notFound();
 
+    const url = new URL(context.request.url);
+    const marker = url.searchParams.get('marker') || undefined;
+
     // 权限检查（支持 API Key）
     const headers = new Headers(context.request.headers);
     const { isAdmin, allowedPaths } = await parseUserPermissions(context.env, headers);
 
     // 检查是否有权限访问当前路径
     if (!isPathAllowed(normalizedPath, allowedPaths, isAdmin)) {
-      return new Response(JSON.stringify({ value: [], folders: [] }), {
+      return new Response(JSON.stringify({ value: [], folders: [], marker: null }), {
         headers: { "Content-Type": "application/json" },
       });
     }
@@ -153,6 +156,7 @@ export async function onRequestGet(context) {
       prefix,
       delimiter: "/",
       include: ["httpMetadata", "customMetadata"],
+      cursor: marker,
     });
     const objKeys = objList.objects
       .filter((obj) => {
@@ -177,9 +181,14 @@ export async function onRequestGet(context) {
     const filteredFolders = filterFolders(folders, allowedPaths, isAdmin);
     const filteredFiles = filterFiles(objKeys, normalizedPath, allowedPaths, isAdmin);
 
-    return new Response(JSON.stringify({ value: filteredFiles, folders: filteredFolders }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    const nextMarker = objList?.truncated ? (objList?.cursor || null) : null;
+
+    return new Response(
+      JSON.stringify({ value: filteredFiles, folders: filteredFolders, marker: nextMarker }),
+      {
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   } catch (e) {
     return new Response(e.toString(), { status: 500 });
   }

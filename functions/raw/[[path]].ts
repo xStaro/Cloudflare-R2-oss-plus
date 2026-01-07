@@ -81,48 +81,70 @@ function isFileAllowed(filePath: string, allowedPaths: string[], isAdmin: boolea
 
 export async function onRequestGet(context) {
   const [bucket, path] = parseBucketPath(context);
-  if (!bucket) return notFound();
+  if (!bucket || !path) return notFound();
+
+  const hasS3Backend = typeof bucket.fetchObject === "function" || bucket?.backend === "s3";
 
   const pubUrl = context.env["PUBURL"];
-  if (!pubUrl) {
+  if (!hasS3Backend && !pubUrl) {
     return new Response("PUBURL environment variable is not configured", {
       status: 500,
       headers: { "Content-Type": "text/plain" }
     });
   }
 
-  // 提取 /raw/ 之后的路径
-  const filePath = context.request.url.split("/raw/")[1];
-  if (!filePath) {
-    return notFound();
-  }
-
   // 权限检查（支持 API Key）
   const headers = new Headers(context.request.headers);
   const { isAdmin, allowedPaths } = await parseUserPermissions(context.env, headers);
 
-  const decodedPath = decodeURIComponent(filePath);
-  if (!isFileAllowed(decodedPath, allowedPaths, isAdmin)) {
+  if (!isFileAllowed(path, allowedPaths, isAdmin)) {
     return new Response("Access denied", {
       status: 403,
       headers: { "Content-Type": "text/plain" }
     });
   }
 
-  const url = `${pubUrl}/${filePath}`;
-
   try {
-    const response = await fetch(new Request(url, {
-      headers: context.request.headers,
-      method: context.request.method,
-      redirect: "follow",
-    }));
+    let response: Response;
+
+    if (hasS3Backend) {
+      const forwardHeaders = new Headers();
+      const range = context.request.headers.get("Range");
+      if (range) forwardHeaders.set("Range", range);
+
+      response = await bucket.fetchObject(path, {
+        method: "GET",
+        headers: forwardHeaders,
+      });
+    } else {
+      const encodedKey = path.split("/").map((s: string) => encodeURIComponent(s)).join("/");
+      const url = `${String(pubUrl).replace(/\/+$/, "")}/${encodedKey}`;
+
+      const forwardHeaders = new Headers(context.request.headers);
+      // 避免把站点登录凭据转发给对象存储源站
+      forwardHeaders.delete("Authorization");
+      forwardHeaders.delete("Cookie");
+      forwardHeaders.delete("X-API-Key");
+      forwardHeaders.delete("X-Guest-Password");
+
+      response = await fetch(
+        new Request(url, {
+          headers: forwardHeaders,
+          method: context.request.method,
+          redirect: "follow",
+          cache: "no-store",
+        })
+      );
+    }
 
     const headers = new Headers(response.headers);
 
     // 缩略图设置长期缓存
     if (path.startsWith(THUMBNAILS_PATH)) {
       headers.set("Cache-Control", "max-age=31536000");
+    } else {
+      // 普通文件避免缓存导致“保存后仍看到旧内容”
+      headers.set("Cache-Control", "no-store");
     }
 
     // 添加 CORS 头

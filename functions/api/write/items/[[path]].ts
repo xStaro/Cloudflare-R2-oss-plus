@@ -125,12 +125,26 @@ export async function onRequestPut(context) {
     const sourceName = decodeURIComponent(
       request.headers.get("x-amz-copy-source")
     );
+    const hasThumbnailOverride = request.headers.has("fd-thumbnail");
+
+    // 优先使用后端原生 copy（避免大对象经由 Worker 中转）
+    if (!hasThumbnailOverride && typeof bucket.copyObject === "function") {
+      try {
+        await bucket.copyObject(sourceName, path);
+        return new Response(JSON.stringify({ key: path, size: 0, uploaded: new Date().toISOString() }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (e: any) {
+        if (e?.status === 404) return notFound();
+        throw e;
+      }
+    }
+
     const source = await bucket.get(sourceName);
     if (!source) return notFound();
     content = source.body;
     httpMetadata = source.httpMetadata;
-    if (source.customMetadata.thumbnail)
-      customMetadata.thumbnail = source.customMetadata.thumbnail;
+    if (source.customMetadata.thumbnail) customMetadata.thumbnail = source.customMetadata.thumbnail;
   }
 
   if (request.headers.has("fd-thumbnail"))

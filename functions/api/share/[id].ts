@@ -1,4 +1,5 @@
-import { ShareData, verifyPassword } from "@/utils/share";
+import { ShareData } from "@/utils/share";
+import { parseBucketPath } from "@/utils/bucket";
 
 interface Env {
   BUCKET: R2Bucket;
@@ -10,6 +11,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const shareId = context.params.id as string;
 
   try {
+    const requestUrl = new URL(context.request.url);
+    const currentHost = requestUrl.hostname;
+    const currentDriveId = currentHost.replace(/\..*/, "");
+
     const shareJson = await context.env.ossShares.get(`share:${shareId}`);
     if (!shareJson) {
       return new Response(JSON.stringify({ error: '分享不存在或已过期' }), {
@@ -19,6 +24,44 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     }
 
     const share: ShareData = JSON.parse(shareJson);
+
+    // 多后端场景：仅允许在创建分享的域名下获取信息
+    if (share.host && share.host !== currentHost) {
+      return new Response(JSON.stringify({ error: '分享不存在或已过期' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    if (!share.host && share.driveId && share.driveId !== currentDriveId) {
+      return new Response(JSON.stringify({ error: '分享不存在或已过期' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    if (!share.host && !share.driveId) {
+      const [bucket] = parseBucketPath(context);
+      const canHead = !!bucket && typeof bucket.head === "function";
+      if (!canHead) {
+        return new Response(JSON.stringify({ error: '分享不存在或已过期' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      try {
+        const exists = await bucket.head(share.key);
+        if (!exists) {
+          return new Response(JSON.stringify({ error: '分享不存在或已过期' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      } catch {
+        return new Response(JSON.stringify({ error: '分享不存在或已过期' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
 
     // 检查是否过期
     if (share.expiresAt && Date.now() > share.expiresAt) {
@@ -63,6 +106,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 // DELETE - 删除分享
 export const onRequestDelete: PagesFunction<Env> = async (context) => {
   const shareId = context.params.id as string;
+  const currentHost = new URL(context.request.url).hostname;
 
   // 验证用户权限
   const headers = new Headers(context.request.headers);
@@ -85,6 +129,14 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
 
     const share: ShareData = JSON.parse(shareJson);
 
+    // 多后端场景：仅允许在创建分享的域名下管理
+    if (share.host && share.host !== currentHost) {
+      return new Response(JSON.stringify({ error: '分享不存在' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     // 获取当前用户名
     const base64 = authHeader.split("Basic ")[1];
     const binaryStr = atob(base64);
@@ -97,7 +149,7 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
 
     // 检查是否是创建者或管理员
     const userPerms = context.env[account];
-    const isAdmin = userPerms === '*';
+    const isAdmin = userPerms === '*' || (userPerms && userPerms.split(',').map((p: string) => p.trim()).includes('*'));
     if (share.createdBy !== username && !isAdmin) {
       return new Response(JSON.stringify({ error: '没有权限删除此分享' }), {
         status: 403,

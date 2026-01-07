@@ -1,4 +1,5 @@
 import { ShareData, verifyPassword } from "@/utils/share";
+import { parseBucketPath } from "@/utils/bucket";
 
 interface Env {
   BUCKET: R2Bucket;
@@ -18,6 +19,13 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     }
 
     const share: ShareData = JSON.parse(shareJson);
+
+    // 多后端场景：确保在创建分享时的域名下访问
+    if (share.host && share.host !== url.hostname) {
+      const target = new URL(url.toString());
+      target.hostname = share.host;
+      return Response.redirect(target.toString(), 302);
+    }
 
     // 检查是否过期
     if (share.expiresAt && Date.now() > share.expiresAt) {
@@ -50,7 +58,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     await context.env.ossShares.put(`share:${shareId}`, JSON.stringify(share), kvOptions);
 
     // 获取文件
-    const bucket = context.env.BUCKET;
+    const [bucket] = parseBucketPath(context);
+    if (!bucket || typeof bucket.get !== "function") {
+      return new Response('存储桶未配置', { status: 500 });
+    }
     const obj = await bucket.get(share.key);
 
     if (!obj) {

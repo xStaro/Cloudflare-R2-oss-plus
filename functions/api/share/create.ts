@@ -71,7 +71,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     // 获取文件信息
-    const bucket = context.env.BUCKET;
+    const [bucket] = parseBucketPath(context);
+    if (!bucket || typeof bucket.head !== "function") {
+      return new Response(JSON.stringify({ error: '存储桶未配置' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     const obj = await bucket.head(key);
     if (!obj) {
       return new Response(JSON.stringify({ error: '文件不存在' }), {
@@ -85,6 +91,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const expiresAt = calculateExpiry(duration, customMinutes);
     const ttl = calculateTTL(expiresAt);
 
+    const requestUrl = new URL(context.request.url);
+    const host = requestUrl.hostname;
+    const driveId = host.replace(/\..*/, "");
+
     // 创建分享数据
     const shareData: ShareData = {
       id: shareId,
@@ -93,6 +103,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       fileSize: obj.size,
       createdAt: Date.now(),
       expiresAt: expiresAt,
+      driveId,
+      host,
       downloads: 0,
       createdBy: username || 'anonymous'
     };

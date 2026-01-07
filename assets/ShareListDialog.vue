@@ -77,8 +77,10 @@ async function doDeleteShare(id) {
 }
 
 // 复制分享链接
-function copyLink(id) {
-  const url = `${window.location.origin}/s/${id}`;
+function copyLink(share) {
+  const host = share?.host;
+  const origin = host ? `${window.location.protocol}//${host}` : window.location.origin;
+  const url = `${origin}/s/${share.id}`;
   navigator.clipboard.writeText(url);
   emit('toast', { type: 'success', message: '链接已复制' });
 }
@@ -238,7 +240,7 @@ watch(() => props.show, (newVal) => {
               </div>
             </div>
             <div class="share-actions">
-              <button class="action-btn copy" @click="copyLink(share.id)" title="复制链接">
+              <button class="action-btn copy" @click="copyLink(share)" title="复制链接">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                   <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>

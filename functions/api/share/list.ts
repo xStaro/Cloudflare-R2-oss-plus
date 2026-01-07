@@ -1,5 +1,6 @@
 import { ShareData } from "@/utils/share";
 import { decodeBasicAuth } from "@/utils/auth";
+import { parseBucketPath } from "@/utils/bucket";
 
 interface Env {
   ossShares: KVNamespace;
@@ -20,6 +21,13 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 
   try {
+    const requestUrl = new URL(context.request.url);
+    const currentHost = requestUrl.hostname;
+    const currentDriveId = currentHost.replace(/\..*/, "");
+
+    const [bucket] = parseBucketPath(context);
+    const canHead = !!bucket && typeof bucket.head === "function";
+
     const { username, account } = credentials;
     const userPerms = context.env[account];
     const isAdmin = userPerms === '*' || (userPerms && userPerms.split(',').map((p: string) => p.trim()).includes('*'));
@@ -40,6 +48,26 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             continue;
           }
 
+          // 多后端场景：只显示当前域名对应的分享
+          if (share.host && share.host !== currentHost) {
+            continue;
+          }
+          if (!share.host && share.driveId && share.driveId !== currentDriveId) {
+            continue;
+          }
+          if (!share.host && !share.driveId) {
+            if (!canHead) continue;
+            // 兼容旧数据：仅展示“当前后端确实存在该对象”的分享
+            try {
+              const exists = await bucket.head(share.key);
+              if (!exists) continue;
+              share.driveId = currentDriveId;
+              share.host = currentHost;
+            } catch {
+              continue;
+            }
+          }
+
           // 检查是否过期
           if (share.expiresAt && now > share.expiresAt) {
             await context.env.ossShares.delete(key.name);
@@ -55,7 +83,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             hasPassword: !!share.password,
             maxDownloads: share.maxDownloads || null,
             downloads: share.downloads,
-            createdBy: share.createdBy
+            createdBy: share.createdBy,
+            host: share.host || null,
           });
         }
       } catch {

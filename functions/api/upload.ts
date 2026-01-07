@@ -14,7 +14,8 @@
  * - timestamp: 是否使用时间戳重命名 (true/false)，默认 false
  */
 
-import { extractApiKeyFromHeaders, THUMBNAILS_PATH } from "@/utils/auth";
+import { extractApiKeyFromHeaders } from "@/utils/auth";
+import { parseBucketPath } from "@/utils/bucket";
 
 /**
  * 生成安全的文件名，移除危险字符
@@ -44,7 +45,7 @@ function generateTimestampFileName(originalName: string): string {
 
 export async function onRequestPost(context: any) {
   const { request, env } = context;
-  const bucket = env.BUCKET;
+  const [bucket] = parseBucketPath(context);
 
   if (!bucket) {
     return new Response(JSON.stringify({ success: false, error: "存储桶未配置" }), {
@@ -188,8 +189,15 @@ export async function onRequestPost(context: any) {
     });
 
     // 构建返回的 URL
-    const pubUrl = env.PUBURL || "";
-    const fileUrl = pubUrl ? `${pubUrl.replace(/\/$/, "")}/${fullPath}` : `/${fullPath}`;
+    const encodedKey = String(fullPath || "")
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    const pubUrl = env.PUBURL || env.FILE_BASE_URL || "";
+    const origin = new URL(request.url).origin;
+    const fileUrl = pubUrl
+      ? `${String(pubUrl).replace(/\/+$/, "")}/${encodedKey}`
+      : `${origin}/raw/${encodedKey}`;
 
     // 更新 API Key 最后使用时间
     const { updateApiKeyLastUsed } = await import("@/utils/apikey");

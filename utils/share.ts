@@ -6,6 +6,8 @@ export interface ShareData {
   fileSize: number;         // 文件大小
   createdAt: number;        // 创建时间戳
   expiresAt: number | null; // 过期时间戳，null 表示永久
+  driveId?: string;         // 可选：创建时所属 drive（多后端场景）
+  host?: string;            // 可选：创建时域名（用于跨域名访问重定向）
   password?: string;        // 可选：访问密码（已加密）
   maxDownloads?: number;    // 可选：最大下载次数
   downloads: number;        // 已下载次数

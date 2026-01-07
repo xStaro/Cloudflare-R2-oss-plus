@@ -31,13 +31,11 @@ export class S3Client {
   public async s3_fetch(input: string, init?: RequestInit) {
     init = init || {};
     const url = new URL(input);
-    const objectKey = decodeURI(url.pathname);
     const method = init.method || "GET";
     const canonicalQueryString = [...url.searchParams]
-      .map(
-        ([key, value]) =>
-          encodeURIComponent(key) + "=" + encodeURIComponent(value)
-      )
+      .map(([key, value]) => [encodeURIComponent(key), encodeURIComponent(value)] as const)
+      .sort((a, b) => (a[0] === b[0] ? a[1].localeCompare(b[1]) : a[0].localeCompare(b[0])))
+      .map(([key, value]) => `${key}=${value}`)
       .join("&");
     const hashedPayload = "UNSIGNED-PAYLOAD";
     const headers = new Headers(init.headers);
@@ -45,21 +43,24 @@ export class S3Client {
     headers.set("x-amz-date", datetime);
     headers.set("x-amz-content-sha256", hashedPayload);
     headers.set("host", url.host);
-    const signedHeaderKeys = [...headers.keys()].filter(
-      (header) =>
-        header === "host" ||
-        header === "content-type" ||
-        header.startsWith("x-amz-")
-    );
+    const signedHeaderKeys = [...headers.keys()]
+      .filter(
+        (header) =>
+          header === "host" ||
+          header === "content-type" ||
+          header.startsWith("x-amz-")
+      )
+      .sort((a, b) => a.localeCompare(b));
     const canonicalHeaders = signedHeaderKeys
       .map((key) => `${key}:${headers.get(key)}\n`)
       .join("");
     const signedHeaders = signedHeaderKeys.join(";");
-    const canonicalUri = encodeURIComponent(objectKey)
-      .replaceAll("%2F", "/")
-      .replace(/[!*'()]/g, function (c) {
-        return "%" + c.charCodeAt(0).toString(16).toUpperCase();
-      });
+    const canonicalUri = url.pathname
+      .split("/")
+      .map((segment) => encodeURIComponent(decodeURIComponent(segment)))
+      .join("/")
+      .replace(/[!*'()]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase())
+      .replace(/%[0-9a-f]{2}/g, (m) => m.toUpperCase());
     const canonicalRequest = [
       method,
       canonicalUri,

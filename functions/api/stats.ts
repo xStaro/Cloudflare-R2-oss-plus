@@ -1,4 +1,5 @@
 import { INTERNAL_PREFIX, FOLDER_MARKER } from "@/utils/auth";
+import { parseBucketPath } from "@/utils/bucket";
 
 interface Env {
   BUCKET: R2Bucket;
@@ -46,8 +47,8 @@ interface StatsResponse {
   cachedAt?: string;
 }
 
-// Simple in-memory cache (will reset on cold start)
-let statsCache: { data: StatsResponse; timestamp: number } | null = null;
+// Simple in-memory cache (will reset on cold start). Keyed by hostname for multi-backend scenarios.
+let statsCache = new Map<string, { data: StatsResponse; timestamp: number }>();
 
 // Class A operations (write operations)
 const CLASS_A_ACTIONS = [
@@ -340,16 +341,21 @@ async function fetchOperationsStats(env: Env): Promise<OperationsStats> {
 }
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const { BUCKET } = context.env;
   const url = new URL(context.request.url);
+  const cacheKey = url.hostname;
+  const [BUCKET] = parseBucketPath(context);
+  if (!BUCKET) {
+    return Response.json({ error: "存储桶未配置" }, { status: 500 });
+  }
   const forceRefresh = url.searchParams.has('refresh') || url.searchParams.has('nocache');
 
   // Check cache
-  if (!forceRefresh && statsCache && Date.now() - statsCache.timestamp < CACHE_TTL_MS) {
+  const cached = statsCache.get(cacheKey);
+  if (!forceRefresh && cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return Response.json({
-      ...statsCache.data,
+      ...cached.data,
       cached: true,
-      cachedAt: new Date(statsCache.timestamp).toISOString(),
+      cachedAt: new Date(cached.timestamp).toISOString(),
     });
   }
 
@@ -382,7 +388,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   try {
     // Fetch storage stats and operations stats in parallel
-    const operationsPromise = fetchOperationsStats(context.env);
+    const isS3Backend = typeof (BUCKET as any).fetchObject === "function" || (BUCKET as any)?.backend === "s3";
+    const operationsPromise: Promise<OperationsStats> = isS3Backend
+      ? Promise.resolve({ classA: 0, classB: 0, period: '', configured: false })
+      : fetchOperationsStats(context.env);
 
     do {
       const listed = await BUCKET.list({
@@ -426,10 +435,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     stats.operations = await operationsPromise;
 
     // Update cache
-    statsCache = {
-      data: stats,
-      timestamp: Date.now(),
-    };
+    statsCache.set(cacheKey, { data: stats, timestamp: Date.now() });
 
     return Response.json(stats, {
       headers: {

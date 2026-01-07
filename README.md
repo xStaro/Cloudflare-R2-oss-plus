@@ -196,6 +196,11 @@
 | `FILE_BASE_URL` | ❌ | 前端文件访问 URL（CDN 回源场景） | `https://cdn.example.com` |
 | `GUEST` | ❌ | 访客可访问目录 | `public/` |
 | `GUEST_UPLOAD_PASSWORD` | ❌ | 访客上传密码 | `your_password` |
+| `S3_ENDPOINT` | ❌ | **S3 兼容后端**：Endpoint（配置后会切换到 S3 模式） | `https://s3.example.com` |
+| `S3_BUCKET` | ❌ | **S3 兼容后端**：Bucket 名称 | `my-bucket` |
+| `S3_REGION` | ❌ | **S3 兼容后端**：区域（AWS 常见如 `us-east-1`；R2 可用 `auto`） | `us-east-1` |
+| `S3_ACCESS_KEY_ID`/`AWS_ACCESS_KEY_ID` | ❌ | **S3 兼容后端**：AccessKeyId | - |
+| `S3_SECRET_ACCESS_KEY`/`AWS_SECRET_ACCESS_KEY` | ❌ | **S3 兼容后端**：SecretAccessKey | - |
 | `CF_ACCOUNT_ID` | ❌ | Cloudflare 账户 ID（操作统计需要） | `abc123...` |
 | `CF_API_TOKEN` | ❌ | API Token（操作统计需要） | `xxx...` |
 | `R2_BUCKET_NAME` | ❌ | 指定统计的存储桶名称 | `my-drive` |
@@ -211,6 +216,20 @@ PUBURL = https://pub-xxx.r2.dev
 ```
 
 获取方式：进入 R2 存储桶 → 设置 → 公开访问 → 复制公共存储桶 URL
+
+---
+
+## ✅ S3 兼容存储支持（新增）
+
+如果你希望把本项目当作“通用 S3 网盘/对象存储管理器”，可以通过环境变量切换到 **S3 模式**：
+
+1. 设置 `S3_ENDPOINT` + `S3_BUCKET`
+2. 设置凭据：`S3_ACCESS_KEY_ID`/`AWS_ACCESS_KEY_ID` 与 `S3_SECRET_ACCESS_KEY`/`AWS_SECRET_ACCESS_KEY`
+3. （推荐）设置 `S3_REGION`，避免 AWS 等服务因为 region 不匹配产生 301 跳转导致签名失效
+
+> 说明：
+> - 只要 `S3_ENDPOINT`、`S3_BUCKET` 与凭据齐全，后端会自动走 S3；此时 `BUCKET`/`PUBURL` 不再是核心必需（仍可保留用于 R2 模式或其他功能）。
+> - `/raw/...` 会走服务端签名直读，并对非缩略图响应设置 `Cache-Control: no-store`，避免“保存后仍看到旧内容”。
 
 #### FILE_BASE_URL（可选）
 
