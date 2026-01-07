@@ -525,7 +525,8 @@ export default {
 
     // 带认证的 fetch
     async authFetch(url) {
-      return fetch(url, { headers: this.getAuthHeaders() });
+      // 预览内容优先保证“及时性”，避免浏览器缓存导致保存后仍看到旧内容
+      return fetch(url, { headers: this.getAuthHeaders(), cache: 'no-store' });
     },
 
     reset() {

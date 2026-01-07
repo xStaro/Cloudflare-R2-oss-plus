@@ -195,7 +195,7 @@ async function loadFile() {
   libsError.value = "";
   activeTab.value = "edit";
 
-  const contentPromise = fetch(rawUrl.value, { headers: getAuthHeaders() });
+  const contentPromise = fetch(rawUrl.value, { headers: getAuthHeaders(), cache: "no-store" });
   const libsPromise = ensureMarkdownLibs();
 
   try {
