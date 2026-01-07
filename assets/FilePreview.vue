@@ -265,6 +265,8 @@
 </template>
 
 <script>
+import { escapeHtml, sanitizeHtmlFragment, sanitizeImageSrc, sanitizeLinkHref } from "./markdown-sanitize.mjs";
+
 // Library loading utilities
 const loadScript = (src) => {
   return new Promise((resolve, reject) => {
@@ -672,8 +674,32 @@ export default {
       }
       const text = await response.text();
 
-      // Configure marked
+      // Configure marked（安全：允许常见标签，过滤危险内容）
+
+      const safeRenderer = window.marked?.Renderer ? new window.marked.Renderer() : null;
+      if (!safeRenderer) {
+        // 安全兜底：如果无法创建 Renderer，则不渲染 HTML（避免 XSS）
+        this.markdownContent = `<pre><code>${escapeHtml(text)}</code></pre>`;
+        this.loading = false;
+        return;
+      }
+
+      safeRenderer.html = (html) => sanitizeHtmlFragment(html);
+      safeRenderer.link = (href, title, linkText) => {
+        const safeHref = sanitizeLinkHref(href);
+        if (!safeHref) return linkText;
+        const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+        return `<a href="${escapeHtml(safeHref)}"${titleAttr}>${linkText}</a>`;
+      };
+      safeRenderer.image = (href, title, alt) => {
+        const safeSrc = sanitizeImageSrc(href);
+        if (!safeSrc) return '';
+        const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+        return `<img src="${escapeHtml(safeSrc)}" alt="${escapeHtml(alt)}"${titleAttr} />`;
+      };
+
       window.marked.setOptions({
+        renderer: safeRenderer,
         highlight: (code, lang) => {
           if (lang && window.hljs.getLanguage(lang)) {
             return window.hljs.highlight(code, { language: lang }).value;

@@ -346,6 +346,7 @@ import {
   getFileTypeForFile,
   parseSearchQuery,
 } from "/assets/search.mjs";
+import { encodePathForUrl } from "./url-utils.mjs";
 import Dialog from "./Dialog.vue";
 import Header from "./Header.vue";
 import StatsCards from "./StatsCards.vue";
@@ -674,13 +675,22 @@ export default {
       }
     },
 
+    getChildrenUrl(prefix) {
+      return `/api/children/${encodePathForUrl(prefix)}`;
+    },
+
+    getWriteItemUrl(key) {
+      return `/api/write/items/${encodePathForUrl(key)}`;
+    },
+
     getFileUrl(key) {
       // 如果配置了 fileBaseUrl（CDN 回源），直接使用
       // 否则使用 /raw/ 路由（通过 Pages Function 代理）
+      const encodedKey = encodePathForUrl(key);
       if (this.fileBaseUrl) {
-        return `${this.fileBaseUrl}/${key}`;
+        return `${this.fileBaseUrl}/${encodedKey}`;
       }
-      return `/raw/${key}`;
+      return `/raw/${encodedKey}`;
     },
 
     // Navigation
@@ -801,13 +811,13 @@ export default {
         type: 'danger',
         callback: async () => {
           this.batchLoading = true;
-          try {
-            for (const key of this.selectedItems) {
-              await axios.delete(`/api/write/items/${key}`);
-            }
-            this.clearSelection();
-            this.fetchFiles();
-            this.$refs.statsCards?.refresh();
+           try {
+             for (const key of this.selectedItems) {
+              await axios.delete(this.getWriteItemUrl(key));
+             }
+             this.clearSelection();
+             this.fetchFiles();
+             this.$refs.statsCards?.refresh();
             this.$refs.toast?.success('删除成功');
           } catch (error) {
             console.error('Batch delete failed:', error);
@@ -834,15 +844,15 @@ export default {
           const normalizedPath = targetPath === '' ? '' : (targetPath.endsWith('/') ? targetPath : targetPath + '/');
 
           this.batchLoading = true;
-          try {
-            for (const key of this.selectedItems) {
-              const fileName = key.split('/').pop();
-              const targetFilePath = normalizedPath + fileName;
-              await this.copyPaste(key, targetFilePath);
-              await axios.delete(`/api/write/items/${key}`);
-            }
-            this.clearSelection();
-            this.fetchFiles();
+           try {
+             for (const key of this.selectedItems) {
+               const fileName = key.split('/').pop();
+               const targetFilePath = normalizedPath + fileName;
+               await this.copyPaste(key, targetFilePath);
+              await axios.delete(this.getWriteItemUrl(key));
+             }
+             this.clearSelection();
+             this.fetchFiles();
           } catch (error) {
             console.error('Batch move failed:', error);
             this.$refs.toast?.error('批量移动失败');
@@ -913,7 +923,7 @@ export default {
     },
 
     async copyPaste(source, target) {
-      const uploadUrl = `/api/write/items/${target}`;
+      const uploadUrl = this.getWriteItemUrl(target);
       await axios.put(uploadUrl, "", {
         headers: { "x-amz-copy-source": encodeURIComponent(source) },
       });
@@ -929,9 +939,9 @@ export default {
         icon: 'folder',
         confirmText: '创建',
         callback: async (folderName) => {
-          if (!folderName) return;
-          try {
-            const uploadUrl = `/api/write/items/${this.cwd}${folderName}/_$folder$`;
+           if (!folderName) return;
+           try {
+            const uploadUrl = this.getWriteItemUrl(`${this.cwd}${folderName}/_$folder$`);
             await axios.put(uploadUrl, "");
             this.fetchFiles();
             this.$refs.statsCards?.refresh();
@@ -966,7 +976,7 @@ export default {
         headers['Authorization'] = `Basic ${credentials}`;
       }
 
-      return fetch(`/api/children/${this.cwd}`, { headers })
+      return fetch(this.getChildrenUrl(this.cwd), { headers })
         .then((res) => {
           if (!res.ok) throw new Error('获取文件列表失败');
           return res.json();
@@ -1007,7 +1017,7 @@ export default {
       if (typeof file === 'object') {
         this.previewFileUrl = this.getFileUrl(file.key);
         // fetchUrl 始终使用 /raw/ 路由，避免 CORS 问题
-        this.previewFetchUrl = `/raw/${file.key}`;
+        this.previewFetchUrl = `/raw/${encodePathForUrl(file.key)}`;
         this.previewFileName = file.key?.split('/').pop() || '';
         this.previewContentType = file.httpMetadata?.contentType || '';
         this.previewFileKey = file.key || '';
@@ -1089,10 +1099,10 @@ export default {
 
       if (file.type.startsWith("image/") || file.type === "video/mp4") {
         try {
-          const thumbnailBlob = await generateThumbnail(file);
-          const digestHex = await blobDigest(thumbnailBlob);
+           const thumbnailBlob = await generateThumbnail(file);
+           const digestHex = await blobDigest(thumbnailBlob);
 
-          const thumbnailUploadUrl = `/api/write/items/_$flaredrive$/thumbnails/${digestHex}.png`;
+          const thumbnailUploadUrl = this.getWriteItemUrl(`_$flaredrive$/thumbnails/${digestHex}.png`);
           try {
             await axios.put(thumbnailUploadUrl, thumbnailBlob, {
               headers: { 'Content-Type': 'image/png' }
@@ -1112,7 +1122,7 @@ export default {
       }
 
       try {
-        const uploadUrl = `/api/write/items/${basedir}${file.name}`;
+        const uploadUrl = this.getWriteItemUrl(`${basedir}${file.name}`);
         const headers = {};
         const onUploadProgress = (progressEvent) => {
           var percentCompleted =
@@ -1160,7 +1170,7 @@ export default {
         type: 'danger',
         callback: async () => {
           try {
-            await axios.delete(`/api/write/items/${key}`);
+            await axios.delete(this.getWriteItemUrl(key));
             this.fetchFiles();
             this.$refs.statsCards?.refresh();
             this.$refs.toast?.success('删除成功');
@@ -1186,7 +1196,7 @@ export default {
           if (!newName || newName === currentName) return;
           try {
             await this.copyPaste(key, `${this.cwd}${newName}`);
-            await axios.delete(`/api/write/items/${key}`);
+            await axios.delete(this.getWriteItemUrl(key));
             this.fetchFiles();
           } catch (error) {
             console.error('Rename failed:', error);
@@ -1240,7 +1250,7 @@ export default {
 
               try {
                 await this.copyPaste(item.key, newItemPath);
-                await axios.delete(`/api/write/items/${item.key}`);
+                await axios.delete(this.getWriteItemUrl(item.key));
                 processedItems++;
                 this.uploadProgress = (processedItems / totalItems) * 100;
               } catch (error) {
@@ -1252,11 +1262,11 @@ export default {
             // 处理文件夹标记：尝试复制，如果不存在则创建新的
             try {
               await this.copyPaste(sourceMarker, targetMarker);
-              await axios.delete(`/api/write/items/${sourceMarker}`);
+              await axios.delete(this.getWriteItemUrl(sourceMarker));
             } catch (error) {
               // 源文件夹标记不存在，直接创建新的标记
               if (error.response?.status === 404) {
-                await axios.put(`/api/write/items/${targetMarker}`, '');
+                await axios.put(this.getWriteItemUrl(targetMarker), '');
               } else {
                 throw error;
               }
@@ -1306,7 +1316,7 @@ export default {
 
                 try {
                   await this.copyPaste(item.key, newPath);
-                  await axios.delete(`/api/write/items/${item.key}`);
+                  await axios.delete(this.getWriteItemUrl(item.key));
                   processedItems++;
                   this.uploadProgress = (processedItems / totalItems) * 100;
                 } catch (error) {
@@ -1316,12 +1326,12 @@ export default {
 
               const targetFolderPath = targetBasePath.slice(0, -1) + '_$folder$';
               await this.copyPaste(key, targetFolderPath);
-              await axios.delete(`/api/write/items/${key}`);
+              await axios.delete(this.getWriteItemUrl(key));
               this.uploadProgress = null;
             } else {
               const targetFilePath = normalizedPath + finalFileName;
               await this.copyPaste(key, targetFilePath);
-              await axios.delete(`/api/write/items/${key}`);
+              await axios.delete(this.getWriteItemUrl(key));
             }
 
             this.fetchFiles();
@@ -1379,7 +1389,7 @@ export default {
       const normalizedPrefix = prefix.endsWith('/') ? prefix : prefix + '/';
 
       do {
-        const url = new URL(`/api/children/${normalizedPrefix}`, window.location.origin);
+        const url = new URL(this.getChildrenUrl(normalizedPrefix), window.location.origin);
         if (marker) {
           url.searchParams.set('marker', marker);
         }

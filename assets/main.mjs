@@ -1,3 +1,4 @@
+import { encodePathForUrl } from "./url-utils.mjs";
 const THUMBNAIL_SIZE = 144;
 
 /**
@@ -60,11 +61,12 @@ export const SIZE_LIMIT = 100 * 1000 * 1000; // 100MB
  * @param {Record<string, any>} options
  */
 export async function multipartUpload(key, file, options) {
+  const encodedKey = encodePathForUrl(key);
   const headers = options?.headers || {};
   headers["content-type"] = file.type;
 
   const uploadId = await axios
-    .post(`/api/write/items/${key}?uploads`, "", { headers })
+    .post(`/api/write/items/${encodedKey}?uploads`, "", { headers })
     .then((res) => res.data.uploadId);
   const totalChunks = Math.ceil(file.size / SIZE_LIMIT);
 
@@ -73,7 +75,7 @@ export async function multipartUpload(key, file, options) {
       const chunk = file.slice((i - 1) * SIZE_LIMIT, i * SIZE_LIMIT);
       const searchParams = new URLSearchParams({ partNumber: i, uploadId });
       yield axios
-        .put(`/api/write/items/${key}?${searchParams}`, chunk, {
+        .put(`/api/write/items/${encodedKey}?${searchParams}`, chunk, {
           onUploadProgress(progressEvent) {
             if (typeof options?.onUploadProgress !== "function") return;
             options.onUploadProgress({
@@ -95,7 +97,7 @@ export async function multipartUpload(key, file, options) {
     uploadedParts[partNumber - 1] = { partNumber, etag };
   }
   const completeParams = new URLSearchParams({ uploadId });
-  await axios.post(`/api/write/items/${key}?${completeParams}`, {
+  await axios.post(`/api/write/items/${encodedKey}?${completeParams}`, {
     parts: uploadedParts,
   });
 }

@@ -149,6 +149,8 @@
 </template>
 
 <script>
+import { encodePathForUrl } from "./url-utils.mjs";
+
 export default {
   name: 'FileCard',
   props: {
@@ -211,20 +213,22 @@ export default {
       const thumbnailHash = this.file.customMetadata?.thumbnail;
       if (thumbnailHash) {
         // 缩略图存储在 _$flaredrive$/thumbnails/{hash}.png
+        const thumbnailKey = `_$flaredrive$/thumbnails/${thumbnailHash}.png`;
         if (this.fileBaseUrl) {
-          return `${this.fileBaseUrl}/_$flaredrive$/thumbnails/${thumbnailHash}.png`;
+          return `${this.fileBaseUrl}/${encodePathForUrl(thumbnailKey)}`;
         }
-        return `/raw/_$flaredrive$/thumbnails/${thumbnailHash}.png`;
+        return `/raw/${encodePathForUrl(thumbnailKey)}`;
       }
 
       // 如果没有缩略图但是图片，使用原图作为缩略图
       if (!this.canPreview) return null;
       const contentType = this.file.httpMetadata?.contentType || '';
       if (contentType.startsWith('image/')) {
+        const key = this.file.key || '';
         if (this.fileBaseUrl) {
-          return `${this.fileBaseUrl}/${this.file.key}`;
+          return `${this.fileBaseUrl}/${encodePathForUrl(key)}`;
         }
-        return `/raw/${this.file.key}`;
+        return `/raw/${encodePathForUrl(key)}`;
       }
       return null;
     }

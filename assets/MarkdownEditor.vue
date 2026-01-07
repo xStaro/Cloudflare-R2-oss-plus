@@ -1,6 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
+import { escapeHtml, sanitizeHtmlFragment, sanitizeImageSrc, sanitizeLinkHref } from "./markdown-sanitize.mjs";
+import { encodePathForUrl } from "./url-utils.mjs";
 
 const props = defineProps({
   modelValue: {
@@ -36,6 +38,7 @@ const libsError = ref("");
 
 const activeTab = ref("edit");
 const showConfirmClose = ref(false);
+const renderedHtml = ref("");
 
 const fileName = computed(() => {
   if (!props.fileKey) return "";
@@ -43,13 +46,6 @@ const fileName = computed(() => {
 });
 
 const dirty = computed(() => content.value !== originalContent.value);
-
-function encodePathForUrl(path) {
-  return String(path || "")
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-}
 
 const rawUrl = computed(() => `/raw/${encodePathForUrl(props.fileKey)}`);
 const saveUrl = computed(() => `/api/write/items/${encodePathForUrl(props.fileKey)}`);
@@ -105,11 +101,37 @@ const CDN = {
 };
 
 let markedConfigured = false;
+let markedSafeMode = false;
 function configureMarked() {
   if (markedConfigured) return;
   if (!window.marked || !window.hljs) return;
 
+  const escapeAttr = escapeHtml;
+
+  const safeRenderer = window.marked?.Renderer ? new window.marked.Renderer() : null;
+  if (!safeRenderer) {
+    markedSafeMode = false;
+    markedConfigured = true;
+    libsError.value = "安全策略：无法初始化 Markdown 渲染器，预览已降级为纯文本";
+    return;
+  }
+
+  safeRenderer.html = (html) => sanitizeHtmlFragment(html);
+  safeRenderer.link = (href, title, linkText) => {
+    const safeHref = sanitizeLinkHref(href);
+    if (!safeHref) return linkText;
+    const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
+    return `<a href="${escapeAttr(safeHref)}"${titleAttr}>${linkText}</a>`;
+  };
+  safeRenderer.image = (href, title, alt) => {
+    const safeSrc = sanitizeImageSrc(href);
+    if (!safeSrc) return "";
+    const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
+    return `<img src="${escapeAttr(safeSrc)}" alt="${escapeAttr(alt)}"${titleAttr} />`;
+  };
+
   window.marked.setOptions({
+    renderer: safeRenderer,
     highlight: (code, lang) => {
       if (lang && window.hljs.getLanguage(lang)) {
         return window.hljs.highlight(code, { language: lang }).value;
@@ -120,6 +142,7 @@ function configureMarked() {
     gfm: true,
   });
 
+  markedSafeMode = true;
   markedConfigured = true;
 }
 
@@ -135,14 +158,32 @@ async function ensureMarkdownLibs() {
   }
 }
 
-const renderedHtml = computed(() => {
-  if (!libsReady.value || !window.marked) return "";
-  try {
-    return window.marked.parse(content.value || "");
-  } catch (e) {
-    return `<p>预览渲染失败：${String(e?.message || e)}</p>`;
+let renderTimer = null;
+function renderPreviewNow() {
+  if (!libsReady.value || !window.marked) {
+    renderedHtml.value = "";
+    return;
   }
-});
+
+  if (!markedSafeMode) {
+    renderedHtml.value = `<pre><code>${escapeHtml(content.value || "")}</code></pre>`;
+    return;
+  }
+
+  try {
+    renderedHtml.value = window.marked.parse(content.value || "");
+  } catch (e) {
+    renderedHtml.value = `<p>预览渲染失败：${String(e?.message || e)}</p>`;
+  }
+}
+
+function scheduleRenderPreview() {
+  if (renderTimer) clearTimeout(renderTimer);
+  renderTimer = setTimeout(() => {
+    renderTimer = null;
+    renderPreviewNow();
+  }, 200);
+}
 
 async function loadFile() {
   if (!props.fileKey) return;
@@ -184,7 +225,7 @@ async function save() {
   error.value = "";
 
   try {
-    const headers = { "Content-Type": resolvedContentType.value };
+    const headers = { "Content-Type": resolvedContentType.value, ...getAuthHeaders() };
     if (props.guestUploadPassword) headers["X-Guest-Password"] = props.guestUploadPassword;
 
     await axios.put(saveUrl.value, content.value, { headers });
@@ -251,6 +292,15 @@ function handleKeydown(e) {
   }
 }
 
+watch([content, libsReady], () => {
+  if (!props.modelValue) return;
+  if (!libsReady.value) {
+    renderedHtml.value = "";
+    return;
+  }
+  scheduleRenderPreview();
+});
+
 watch(
   () => props.modelValue,
   (val) => {
@@ -261,6 +311,10 @@ watch(
     } else {
       document.body.style.overflow = "";
       document.removeEventListener("keydown", handleKeydown);
+      if (renderTimer) {
+        clearTimeout(renderTimer);
+        renderTimer = null;
+      }
       error.value = "";
       libsError.value = "";
     }
@@ -277,6 +331,10 @@ watch(
 onBeforeUnmount(() => {
   document.removeEventListener("keydown", handleKeydown);
   document.body.style.overflow = "";
+  if (renderTimer) {
+    clearTimeout(renderTimer);
+    renderTimer = null;
+  }
 });
 </script>
 
@@ -571,6 +629,127 @@ onBeforeUnmount(() => {
   overflow: auto;
   padding: 16px;
   background: var(--card-bg);
+}
+
+.markdown-body {
+  max-width: 900px;
+  margin: 0 auto;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-primary, #333);
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.markdown-body h1 {
+  font-size: 1.8em;
+  border-bottom: 1px solid var(--border-color, #e5e5e5);
+  padding-bottom: 0.3em;
+}
+
+.markdown-body h2 {
+  font-size: 1.4em;
+  border-bottom: 1px solid var(--border-color, #e5e5e5);
+  padding-bottom: 0.3em;
+}
+
+.markdown-body h3 {
+  font-size: 1.2em;
+}
+
+.markdown-body p {
+  margin-bottom: 16px;
+}
+
+.markdown-body code {
+  padding: 0.2em 0.4em;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  font-size: 0.9em;
+}
+
+.markdown-body pre {
+  padding: 16px;
+  background: #1e1e1e;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+  color: #d4d4d4;
+}
+
+.markdown-body blockquote {
+  padding: 0 1em;
+  border-left: 4px solid var(--primary-color, #f38020);
+  color: var(--text-secondary, #666);
+  margin: 0 0 16px 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 2em;
+  margin-bottom: 16px;
+}
+
+.markdown-body li {
+  margin-bottom: 4px;
+}
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color, #e5e5e5);
+}
+
+.markdown-body th {
+  background: var(--bg-secondary, #f5f5f5);
+  font-weight: 600;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+.markdown-body a {
+  color: var(--primary-color, #f38020);
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--border-color, #e5e5e5);
+  margin: 24px 0;
+}
+
+.markdown-body :deep(pre code.hljs) {
+  background: transparent;
 }
 
 .hint {
