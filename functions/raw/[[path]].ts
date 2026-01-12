@@ -142,8 +142,8 @@ export async function onRequestGet(context) {
           headers: forwardHeaders,
           method: context.request.method,
           redirect: "follow",
-          cache: "no-store",
-        })
+        }),
+        { cf: { cacheTtl: 0 } }
       );
     }
 
