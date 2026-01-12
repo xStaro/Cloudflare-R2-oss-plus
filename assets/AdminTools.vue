@@ -126,6 +126,157 @@
                 </button>
               </div>
             </div>
+
+            <!-- 存储后端配置 -->
+            <div class="tool-card">
+              <div class="tool-header">
+                <div class="tool-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                    <path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
+                    <path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/>
+                  </svg>
+                </div>
+                <div class="tool-info">
+                  <h4>存储后端配置</h4>
+                  <p>在页面中管理多 S3/R2 后端（密钥不回显，留空表示保留已有）</p>
+                </div>
+              </div>
+
+              <div v-if="storageError" class="storage-error">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>{{ storageError }}</span>
+              </div>
+
+              <div class="tool-actions">
+                <button
+                  class="btn btn-secondary"
+                  @click="loadStorageConfig"
+                  :disabled="storageLoading || storageSaving"
+                >
+                  <svg v-if="storageLoading" class="spinning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  {{ storageLoading ? '加载中...' : '加载配置' }}
+                </button>
+                <button
+                  class="btn btn-primary"
+                  @click="saveStorageConfig"
+                  :disabled="storageLoading || storageSaving"
+                >
+                  <svg v-if="storageSaving" class="spinning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                  {{ storageSaving ? '保存中...' : '保存配置' }}
+                </button>
+              </div>
+
+              <div class="storage-hint">
+                <p>
+                  Drive ID 对应当前域名的第一个子域名。例如访问 <code>drive1.example.com</code> 时，Drive ID 为 <code>drive1</code>。
+                </p>
+              </div>
+
+              <div class="drive-list">
+                <div v-for="(drive, index) in storageDrives" :key="index" class="drive-card">
+                  <div class="drive-card-header">
+                    <div class="drive-card-title">
+                      <span class="drive-tag">Drive</span>
+                      <span class="drive-id-text">{{ drive.id || '(未命名)' }}</span>
+                    </div>
+                    <button
+                      class="btn btn-danger btn-sm"
+                      @click="removeStorageDrive(index)"
+                      :disabled="storageLoading || storageSaving"
+                    >
+                      删除
+                    </button>
+                  </div>
+
+                  <div class="drive-grid">
+                    <div class="form-group">
+                      <label>Drive ID</label>
+                      <input v-model="drive.id" placeholder="例如：drive1" />
+                    </div>
+                    <div class="form-group">
+                      <label>名称（可选）</label>
+                      <input v-model="drive.name" placeholder="例如：主网盘" />
+                    </div>
+                    <div class="form-group">
+                      <label>后端类型</label>
+                      <select v-model="drive.backend">
+                        <option value="s3">S3（兼容各类 S3 网盘）</option>
+                        <option value="r2">R2（使用绑定）</option>
+                      </select>
+                    </div>
+                    <div class="form-group" v-if="drive.backend === 'r2'">
+                      <label>R2 Binding（留空=同 Drive ID）</label>
+                      <input v-model="drive.r2Binding" placeholder="例如：BUCKET" />
+                    </div>
+                  </div>
+
+                  <div v-if="drive.backend === 's3'" class="s3-settings">
+                    <div class="drive-grid">
+                      <div class="form-group">
+                        <label>Endpoint</label>
+                        <input v-model="drive.s3.endpoint" placeholder="https://s3.example.com" />
+                      </div>
+                      <div class="form-group">
+                        <label>Bucket</label>
+                        <input v-model="drive.s3.bucket" placeholder="my-bucket" />
+                      </div>
+                      <div class="form-group">
+                        <label>Region（可选，默认 auto）</label>
+                        <input v-model="drive.s3.region" placeholder="auto" />
+                      </div>
+                      <div class="form-group">
+                        <label>Access Key ID（留空=保留已有）</label>
+                        <input v-model="drive.s3.accessKeyId" placeholder="留空=保留已有" />
+                        <div v-if="drive.s3.accessKeyIdPreview" class="field-hint">
+                          当前：<code>{{ drive.s3.accessKeyIdPreview }}</code>
+                        </div>
+                      </div>
+                      <div class="form-group">
+                        <label>Secret Access Key（留空=保留已有）</label>
+                        <input type="password" v-model="drive.s3.secretAccessKey" placeholder="留空=保留已有" />
+                        <div v-if="drive.s3.hasSecretAccessKey" class="field-hint">
+                          当前：<code>已设置</code>
+                        </div>
+                      </div>
+                    </div>
+
+                    <label class="checkbox-row">
+                      <input type="checkbox" v-model="drive.s3.forcePathStyle" />
+                      强制 Path-style（推荐；如提供商要求虚拟主机风格可取消）
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="storage-footer">
+                <button
+                  class="btn btn-secondary"
+                  @click="addStorageDrive"
+                  :disabled="storageLoading || storageSaving"
+                >
+                  添加 Drive
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -149,6 +300,12 @@ export default {
       cleaning: false,
       thumbnailStatus: null,
       cleanupResult: null,
+
+      storageLoaded: false,
+      storageLoading: false,
+      storageSaving: false,
+      storageError: '',
+      storageDrives: [],
     };
   },
   methods: {
@@ -174,6 +331,154 @@ export default {
       return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     },
 
+    createEmptyStorageDrive() {
+      return {
+        id: '',
+        name: '',
+        backend: 's3',
+        r2Binding: '',
+        s3: {
+          endpoint: '',
+          bucket: '',
+          region: 'auto',
+          accessKeyId: '',
+          secretAccessKey: '',
+          forcePathStyle: true,
+          accessKeyIdPreview: '',
+          hasSecretAccessKey: false,
+        },
+      };
+    },
+
+    normalizeStorageDriveFromApi(drive) {
+      const backend = drive?.backend === 'r2' ? 'r2' : 's3';
+      const base = {
+        id: drive?.id || '',
+        name: drive?.name || '',
+        backend,
+        r2Binding: drive?.r2Binding || '',
+        s3: {
+          endpoint: drive?.s3?.endpoint || '',
+          bucket: drive?.s3?.bucket || '',
+          region: drive?.s3?.region || 'auto',
+          accessKeyId: '',
+          secretAccessKey: '',
+          forcePathStyle: drive?.s3?.forcePathStyle !== false,
+          accessKeyIdPreview: drive?.s3?.accessKeyIdPreview || '',
+          hasSecretAccessKey: !!drive?.s3?.hasSecretAccessKey,
+        },
+      };
+
+      if (backend === 'r2') {
+        base.s3 = this.createEmptyStorageDrive().s3;
+      }
+
+      return base;
+    },
+
+    async loadStorageConfig() {
+      this.storageLoading = true;
+      this.storageError = '';
+
+      try {
+        const response = await fetch('/api/config/storage', {
+          headers: this.getAuthHeaders(),
+        });
+
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          const msg = payload?.error || '加载失败';
+          if (response.status === 403) {
+            this.storageError = msg;
+            this.$emit('toast', { type: 'error', message: msg });
+            return;
+          }
+          throw new Error(msg);
+        }
+
+        const drives = payload?.config?.drives;
+        this.storageDrives = Array.isArray(drives) ? drives.map((d) => this.normalizeStorageDriveFromApi(d)) : [];
+        this.storageLoaded = true;
+      } catch (error) {
+        console.error('Load storage config error:', error);
+        this.storageError = error.message || '加载失败';
+        this.$emit('toast', { type: 'error', message: this.storageError });
+      } finally {
+        this.storageLoading = false;
+      }
+    },
+
+    async saveStorageConfig() {
+      const ids = this.storageDrives.map((d) => String(d.id || '').trim()).filter(Boolean);
+      const unique = new Set(ids);
+      if (ids.length !== unique.size) {
+        this.$emit('toast', { type: 'error', message: 'Drive ID 不能重复' });
+        return;
+      }
+      if (this.storageDrives.some((d) => !String(d.id || '').trim())) {
+        this.$emit('toast', { type: 'error', message: '请填写 Drive ID' });
+        return;
+      }
+
+      this.storageSaving = true;
+      this.storageError = '';
+
+      try {
+        const payload = {
+          drives: this.storageDrives.map((d) => ({
+            id: d.id,
+            name: d.name,
+            backend: d.backend,
+            r2Binding: d.r2Binding,
+            s3: d.backend === 's3' ? {
+              endpoint: d.s3.endpoint,
+              bucket: d.s3.bucket,
+              region: d.s3.region,
+              accessKeyId: d.s3.accessKeyId,
+              secretAccessKey: d.s3.secretAccessKey,
+              forcePathStyle: d.s3.forcePathStyle,
+            } : undefined,
+          }))
+        };
+
+        const response = await fetch('/api/config/storage', {
+          method: 'PUT',
+          headers: this.getAuthHeaders(),
+          body: JSON.stringify(payload),
+        });
+
+        const result = await response.json().catch(() => null);
+        if (!response.ok) {
+          const msg = result?.error || '保存失败';
+          if (response.status === 403) {
+            this.storageError = msg;
+            this.$emit('toast', { type: 'error', message: msg });
+            return;
+          }
+          throw new Error(msg);
+        }
+
+        const drives = result?.config?.drives;
+        this.storageDrives = Array.isArray(drives) ? drives.map((d) => this.normalizeStorageDriveFromApi(d)) : [];
+        this.storageLoaded = true;
+        this.$emit('toast', { type: 'success', message: '存储配置已保存' });
+      } catch (error) {
+        console.error('Save storage config error:', error);
+        this.storageError = error.message || '保存失败';
+        this.$emit('toast', { type: 'error', message: this.storageError });
+      } finally {
+        this.storageSaving = false;
+      }
+    },
+
+    addStorageDrive() {
+      this.storageDrives.push(this.createEmptyStorageDrive());
+    },
+
+    removeStorageDrive(index) {
+      this.storageDrives.splice(index, 1);
+    },
+
     async scanThumbnails() {
       this.scanning = true;
       this.cleanupResult = null;
@@ -184,11 +489,13 @@ export default {
         });
 
         if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          const msg = data?.error || '扫描失败';
           if (response.status === 401) {
-            this.$emit('toast', { type: 'error', message: '需要管理员权限' });
+            this.$emit('toast', { type: 'error', message: msg || '需要管理员权限' });
             return;
           }
-          throw new Error('扫描失败');
+          throw new Error(msg);
         }
 
         this.thumbnailStatus = await response.json();
@@ -213,11 +520,13 @@ export default {
         });
 
         if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          const msg = data?.error || '清理失败';
           if (response.status === 401) {
-            this.$emit('toast', { type: 'error', message: '需要管理员权限' });
+            this.$emit('toast', { type: 'error', message: msg || '需要管理员权限' });
             return;
           }
-          throw new Error('清理失败');
+          throw new Error(msg);
         }
 
         this.cleanupResult = await response.json();
@@ -241,10 +550,9 @@ export default {
   },
   watch: {
     modelValue(val) {
-      if (val && !this.thumbnailStatus) {
-        // 打开对话框时自动扫描
-        this.scanThumbnails();
-      }
+      if (!val) return;
+      if (!this.thumbnailStatus) this.scanThumbnails();
+      if (!this.storageLoaded) this.loadStorageConfig();
     }
   }
 };
@@ -252,8 +560,12 @@ export default {
 
 <style scoped>
 .admin-tools-dialog {
-  max-width: 560px;
+  max-width: 760px;
   width: 90vw;
+}
+
+.tool-card + .tool-card {
+  margin-top: 20px;
 }
 
 .dialog-header h3 {
@@ -468,6 +780,22 @@ export default {
   box-shadow: 0 4px 12px rgba(243, 128, 32, 0.3);
 }
 
+.btn-danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error-color);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.btn-sm {
+  flex: unset;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
 /* Spinning animation */
 .spinning {
   animation: spin 1s linear infinite;
@@ -475,6 +803,140 @@ export default {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Storage config */
+.storage-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 16px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: var(--radius-md);
+  color: var(--error-color);
+  font-size: 13px;
+}
+
+.storage-error svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.storage-hint {
+  margin: 12px 0 16px;
+  padding: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.storage-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.drive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.drive-card {
+  padding: 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.drive-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.drive-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.drive-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--primary-light);
+  color: var(--primary-color);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.drive-id-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.drive-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.field-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.field-hint code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.s3-settings {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.storage-footer {
+  margin-top: 16px;
 }
 
 /* Dialog styles (from Dialog.vue) */
@@ -561,6 +1023,10 @@ export default {
 
   .tool-actions {
     flex-direction: column;
+  }
+
+  .drive-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

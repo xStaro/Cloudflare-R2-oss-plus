@@ -81,6 +81,7 @@ export class S3BucketAdapter {
   private client: S3Client;
   private endpoint: URL;
   private bucket: string;
+  private forcePathStyle: boolean;
   public readonly backend = "s3";
 
   constructor(options: {
@@ -89,6 +90,7 @@ export class S3BucketAdapter {
     accessKeyId: string;
     secretAccessKey: string;
     region?: string;
+    forcePathStyle?: boolean;
   }) {
     if (!options?.endpoint) throw new Error("S3_ENDPOINT 未配置");
     if (!options?.bucket) throw new Error("S3_BUCKET 未配置");
@@ -97,6 +99,7 @@ export class S3BucketAdapter {
 
     this.endpoint = new URL(options.endpoint);
     this.bucket = options.bucket;
+    this.forcePathStyle = options.forcePathStyle !== false;
     this.client = new S3Client(options.accessKeyId, options.secretAccessKey, options.region);
   }
 
@@ -104,8 +107,17 @@ export class S3BucketAdapter {
     const url = new URL(this.endpoint.toString());
     const encodedKey = key ? encodePathForS3(key) : "";
     const basePath = url.pathname.replace(/\/+$/, "");
-    const bucketPath = basePath ? `${basePath}/${this.bucket}` : `/${this.bucket}`;
-    url.pathname = `${bucketPath}${encodedKey ? `/${encodedKey}` : ""}`;
+
+    if (this.forcePathStyle) {
+      const bucketPath = basePath ? `${basePath}/${this.bucket}` : `/${this.bucket}`;
+      url.pathname = `${bucketPath}${encodedKey ? `/${encodedKey}` : ""}`;
+    } else {
+      const bucketPrefix = `${this.bucket}.`.toLowerCase();
+      if (!url.hostname.toLowerCase().startsWith(bucketPrefix)) {
+        url.hostname = `${this.bucket}.${url.hostname}`;
+      }
+      url.pathname = `${basePath}${encodedKey ? `/${encodedKey}` : ""}` || "/";
+    }
     url.search = searchParams ? searchParams.toString() : "";
     return url.toString();
   }

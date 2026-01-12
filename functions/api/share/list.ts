@@ -25,7 +25,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     const currentHost = requestUrl.hostname;
     const currentDriveId = currentHost.replace(/\..*/, "");
 
-    const [bucket] = parseBucketPath(context);
+    const [bucket] = await parseBucketPath(context);
     const canHead = !!bucket && typeof bucket.head === "function";
 
     const { username, account } = credentials;

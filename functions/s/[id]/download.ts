@@ -58,7 +58,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     await context.env.ossShares.put(`share:${shareId}`, JSON.stringify(share), kvOptions);
 
     // 获取文件
-    const [bucket] = parseBucketPath(context);
+    const [bucket] = await parseBucketPath(context);
     if (!bucket || typeof bucket.get !== "function") {
       return new Response('存储桶未配置', { status: 500 });
     }

@@ -1,4 +1,5 @@
 import { S3BucketAdapter } from "@/utils/s3-bucket";
+import { loadStorageConfig, normalizeDriveId } from "@/utils/storage-config";
 
 export function notFound() {
   return new Response("Not found", { status: 404 });
@@ -87,13 +88,41 @@ function resolveDefaultS3Bucket(env: any): S3BucketAdapter | null {
   return new S3BucketAdapter({ endpoint, bucket, accessKeyId, secretAccessKey, region });
 }
 
-export function parseBucketPath(context): [any, string] {
+export async function parseBucketPath(context): Promise<[any, string]> {
   const { request, env, params } = context;
   const url = new URL(request.url);
 
   const pathSegments = ((params && params.path) || []) as String[];
   const path = decodeURIComponent(pathSegments.join("/"));
-  const driveid = url.hostname.replace(/\..*/, "");
+  const driveid = normalizeDriveId(url.hostname.replace(/\..*/, ""));
+
+  // 0) KV（网页）配置优先：config:storage
+  const kvConfig = await loadStorageConfig(env?.ossShares);
+  const kvDrive = kvConfig?.drives?.find((d) => normalizeDriveId(d?.id) === driveid);
+  if (kvDrive) {
+    if (kvDrive.backend === "s3") {
+      const s3 = kvDrive.s3;
+      if (!s3) throw new Error(`Drive ${driveid} S3 配置缺失`);
+      return [
+        new S3BucketAdapter({
+          endpoint: s3.endpoint,
+          bucket: s3.bucket,
+          accessKeyId: s3.accessKeyId,
+          secretAccessKey: s3.secretAccessKey,
+          region: s3.region,
+          forcePathStyle: s3.forcePathStyle,
+        }),
+        path,
+      ];
+    }
+
+    if (kvDrive.backend === "r2") {
+      const bindingName = readEnvString(kvDrive.r2Binding) || driveid;
+      const bucketCandidate = env[bindingName];
+      if (isBucketLike(bucketCandidate)) return [bucketCandidate, path];
+      throw new Error(`Drive ${driveid} R2 绑定未配置：${bindingName}`);
+    }
+  }
 
   // 1) driveid 级别的 S3 配置（S3_<DRIVEID>_*）
   const driveS3 = resolveS3BucketForDrive(env, driveid);

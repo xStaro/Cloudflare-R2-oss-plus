@@ -132,8 +132,7 @@ function filterFiles(files: any[], currentPath: string, allowedPaths: string[], 
 
 export async function onRequestGet(context) {
   try {
-    const [bucket, path] = parseBucketPath(context);
-    // 规范化路径：移除末尾斜杠后再添加，确保格式一致
+    const [bucket, path] = await parseBucketPath(context);
     const normalizedPath = path ? path.replace(/\/+$/, '') : '';
     const prefix = normalizedPath ? `${normalizedPath}/` : '';
     if (!bucket || normalizedPath.startsWith(INTERNAL_PREFIX)) return notFound();

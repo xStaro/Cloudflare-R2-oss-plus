@@ -2,7 +2,7 @@ import { notFound, parseBucketPath } from "@/utils/bucket";
 import { getWriteAuthStatusAsync } from "@/utils/auth";
 
 export async function onRequestPostCreateMultipart(context) {
-  const [bucket, path] = parseBucketPath(context);
+  const [bucket, path] = await parseBucketPath(context);
   if (!bucket) return notFound();
 
   const request: Request = context.request;
@@ -27,7 +27,7 @@ export async function onRequestPostCreateMultipart(context) {
 }
 
 export async function onRequestPostCompleteMultipart(context) {
-  const [bucket, path] = parseBucketPath(context);
+  const [bucket, path] = await parseBucketPath(context);
   if (!bucket) return notFound();
 
   const request: Request = context.request;
@@ -71,7 +71,7 @@ export async function onRequestPost(context) {
 }
 
 export async function onRequestPutMultipart(context) {
-  const [bucket, path] = parseBucketPath(context);
+  const [bucket, path] = await parseBucketPath(context);
   if (!bucket) return notFound();
 
   const request: Request = context.request;
@@ -110,7 +110,7 @@ export async function onRequestPut(context) {
     return onRequestPutMultipart(context);
   }
 
-  const [bucket, path] = parseBucketPath(context);
+  const [bucket, path] = await parseBucketPath(context);
   if (!bucket) return notFound();
 
   const request: Request = context.request;
@@ -173,7 +173,7 @@ export async function onRequestDelete(context) {
         headers: { "Content-Type": "application/json" },
     });
   }
-  const [bucket, path] = parseBucketPath(context);
+  const [bucket, path] = await parseBucketPath(context);
   if (!bucket) return notFound();
 
   await bucket.delete(path);

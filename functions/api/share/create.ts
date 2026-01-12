@@ -71,7 +71,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     // 获取文件信息
-    const [bucket] = parseBucketPath(context);
+    const [bucket] = await parseBucketPath(context);
     if (!bucket || typeof bucket.head !== "function") {
       return new Response(JSON.stringify({ error: '存储桶未配置' }), {
         status: 500,

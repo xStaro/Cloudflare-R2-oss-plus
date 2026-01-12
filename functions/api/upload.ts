@@ -45,7 +45,7 @@ function generateTimestampFileName(originalName: string): string {
 
 export async function onRequestPost(context: any) {
   const { request, env } = context;
-  const [bucket] = parseBucketPath(context);
+  const [bucket] = await parseBucketPath(context);
 
   if (!bucket) {
     return new Response(JSON.stringify({ success: false, error: "存储桶未配置" }), {

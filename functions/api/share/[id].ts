@@ -39,7 +39,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       });
     }
     if (!share.host && !share.driveId) {
-      const [bucket] = parseBucketPath(context);
+      const [bucket] = await parseBucketPath(context);
       const canHead = !!bucket && typeof bucket.head === "function";
       if (!canHead) {
         return new Response(JSON.stringify({ error: '分享不存在或已过期' }), {

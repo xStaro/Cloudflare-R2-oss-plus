@@ -343,7 +343,7 @@ async function fetchOperationsStats(env: Env): Promise<OperationsStats> {
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const url = new URL(context.request.url);
   const cacheKey = url.hostname;
-  const [BUCKET] = parseBucketPath(context);
+  const [BUCKET] = await parseBucketPath(context);
   if (!BUCKET) {
     return Response.json({ error: "存储桶未配置" }, { status: 500 });
   }
