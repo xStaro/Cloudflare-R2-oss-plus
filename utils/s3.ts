@@ -4,8 +4,8 @@ function arrayBufferToHex(arrayBuffer: ArrayBuffer) {
     .join("");
 }
 
-async function hmacSHA256(secret: ArrayBuffer, message: string | ArrayBuffer) {
-  if (typeof message === "string") message = new TextEncoder().encode(message);
+async function hmacSHA256(secret: ArrayBuffer | Uint8Array, message: string | ArrayBuffer | Uint8Array) {
+  const messageData = typeof message === "string" ? new TextEncoder().encode(message) : message;
   const key = await crypto.subtle.importKey(
     "raw",
     secret,
@@ -13,7 +13,7 @@ async function hmacSHA256(secret: ArrayBuffer, message: string | ArrayBuffer) {
     false,
     ["sign"]
   );
-  const signature = await crypto.subtle.sign("HMAC", key, message);
+  const signature = await crypto.subtle.sign("HMAC", key, messageData);
   return signature;
 }
 

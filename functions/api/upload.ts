@@ -119,13 +119,14 @@ export async function onRequestPost(context: any) {
   }
 
   // 获取文件
-  const file = formData.get("file") as File | null;
-  if (!file) {
+  const fileEntry = formData.get("file") as unknown;
+  if (!fileEntry || typeof fileEntry === "string" || !(fileEntry as File).name) {
     return new Response(JSON.stringify({ success: false, error: "未找到文件，请使用 'file' 字段上传" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   }
+  const file = fileEntry as File;
 
   // 生成文件名
   let fileName = sanitizeFileName(file.name);
