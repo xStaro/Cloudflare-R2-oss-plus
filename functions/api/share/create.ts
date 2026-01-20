@@ -59,9 +59,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       customMinutes?: number;
       password?: string;
       maxDownloads?: number;
+      trackDownloads?: boolean;
     };
 
-    const { key, duration, customMinutes, password, maxDownloads } = body;
+    const { key, duration, customMinutes, password, maxDownloads, trackDownloads } = body;
 
     if (!key) {
       return new Response(JSON.stringify({ error: '文件路径不能为空' }), {
@@ -115,6 +116,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
     if (maxDownloads && maxDownloads > 0) {
       shareData.maxDownloads = maxDownloads;
+    }
+    if (trackDownloads) {
+      shareData.trackDownloads = true;
     }
 
     // 保存到 KV

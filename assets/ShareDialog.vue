@@ -127,6 +127,14 @@
                 />
               </div>
 
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="trackDownloads" />
+                  <span>记录下载者 IP</span>
+                </label>
+                <p v-if="trackDownloads" class="option-hint">开启后可在分享管理中查看下载记录</p>
+              </div>
+
               <div v-if="error" class="error-message">{{ error }}</div>
 
               <button
@@ -166,6 +174,7 @@ export default {
       password: '',
       enableDownloadLimit: false,
       maxDownloads: 10,
+      trackDownloads: false,
       loading: false,
       error: '',
       shareResult: null,
@@ -200,6 +209,7 @@ export default {
       this.password = '';
       this.enableDownloadLimit = false;
       this.maxDownloads = 10;
+      this.trackDownloads = false;
       this.error = '';
       this.shareResult = null;
       this.copied = '';
@@ -214,7 +224,8 @@ export default {
           duration: this.duration,
           customMinutes: this.duration === 'custom' ? this.customMinutes : undefined,
           password: this.enablePassword ? this.password : undefined,
-          maxDownloads: this.enableDownloadLimit ? this.maxDownloads : undefined
+          maxDownloads: this.enableDownloadLimit ? this.maxDownloads : undefined,
+          trackDownloads: this.trackDownloads || undefined
         };
 
         // 获取认证信息
@@ -446,6 +457,12 @@ export default {
   font-size: 14px;
   background: var(--card-bg);
   color: var(--text-primary);
+}
+
+.option-hint {
+  margin: 8px 0 0 28px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .error-message {

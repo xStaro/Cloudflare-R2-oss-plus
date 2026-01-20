@@ -1,4 +1,4 @@
-import { ShareData, verifyPassword, formatFileSize } from "@/utils/share";
+import { ShareData, verifyPassword, formatFileSize, DownloadRecord } from "@/utils/share";
 import { parseBucketPath } from "@/utils/bucket";
 
 interface Env {
@@ -403,8 +403,32 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       }
     }
 
-    // 更新下载次数
+    // 更新下载次数和记录
     share.downloads++;
+
+    // 仅在开启追踪时记录下载者 IP
+    if (share.trackDownloads) {
+      const clientIP = context.request.headers.get('CF-Connecting-IP')
+        || context.request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim()
+        || context.request.headers.get('X-Real-IP')
+        || 'unknown';
+      const userAgent = context.request.headers.get('User-Agent') || undefined;
+
+      const downloadRecord: DownloadRecord = {
+        ip: clientIP,
+        time: Date.now(),
+        userAgent: userAgent,
+      };
+
+      if (!share.downloadRecords) {
+        share.downloadRecords = [];
+      }
+      if (share.downloadRecords.length >= 100) {
+        share.downloadRecords.shift();
+      }
+      share.downloadRecords.push(downloadRecord);
+    }
+
     const ttl = share.expiresAt ? Math.floor((share.expiresAt - Date.now()) / 1000) : undefined;
     const kvOptions: KVNamespacePutOptions = {};
     if (ttl && ttl > 0) {

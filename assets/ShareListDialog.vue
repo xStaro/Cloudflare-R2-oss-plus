@@ -15,6 +15,36 @@ const loading = ref(false);
 const shares = ref([]);
 const deleteLoading = ref(null);
 const pendingDeleteId = ref(null);
+const expandedShare = ref(null);
+
+// 切换展开下载记录
+function toggleDownloadRecords(shareId) {
+  if (expandedShare.value === shareId) {
+    expandedShare.value = null;
+  } else {
+    expandedShare.value = shareId;
+  }
+}
+
+// 格式化 IP 地址（隐藏部分）
+function formatIP(ip) {
+  if (!ip || ip === 'unknown') return '未知';
+  // 对于 IPv4，隐藏最后一段
+  if (ip.includes('.')) {
+    const parts = ip.split('.');
+    if (parts.length === 4) {
+      return `${parts[0]}.${parts[1]}.${parts[2]}.*`;
+    }
+  }
+  // 对于 IPv6，只显示前几段
+  if (ip.includes(':')) {
+    const parts = ip.split(':');
+    if (parts.length > 2) {
+      return `${parts[0]}:${parts[1]}:****`;
+    }
+  }
+  return ip;
+}
 
 // 加载分享列表
 async function loadShares() {
@@ -222,7 +252,12 @@ watch(() => props.show, (newVal) => {
                   </svg>
                   过期: {{ getExpiryStatus(share.expiresAt).text }}
                 </span>
-                <span class="stat-item">
+                <span
+                  class="stat-item clickable"
+                  :class="{ active: expandedShare === share.id }"
+                  @click="toggleDownloadRecords(share.id)"
+                  :title="share.downloadRecords?.length ? '点击查看下载记录' : '暂无下载记录'"
+                >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                     <polyline points="7 10 12 15 17 10"/>
@@ -237,6 +272,28 @@ watch(() => props.show, (newVal) => {
                   </svg>
                   {{ share.createdBy }}
                 </span>
+              </div>
+
+              <!-- 下载记录展开区域 -->
+              <div v-if="expandedShare === share.id && share.downloadRecords?.length" class="download-records">
+                <div class="records-header">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  下载记录 (最近 {{ share.downloadRecords.length }} 条)
+                </div>
+                <div class="records-list">
+                  <div v-for="(record, idx) in share.downloadRecords.slice().reverse()" :key="idx" class="record-item">
+                    <span class="record-ip" :title="record.ip">{{ formatIP(record.ip) }}</span>
+                    <span class="record-time">{{ formatDate(record.time) }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-else-if="expandedShare === share.id && !share.downloadRecords?.length" class="download-records empty">
+                <span>暂无下载记录</span>
               </div>
             </div>
             <div class="share-actions">
@@ -537,6 +594,81 @@ watch(() => props.show, (newVal) => {
   border-top-color: var(--primary-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+/* Clickable stat item */
+.stat-item.clickable {
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.stat-item.clickable:hover {
+  color: var(--primary-color);
+  background: rgba(243, 128, 32, 0.1);
+}
+
+.stat-item.clickable.active {
+  color: var(--primary-color);
+  background: rgba(243, 128, 32, 0.15);
+}
+
+/* Download Records */
+.download-records {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.download-records.empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.records-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.records-header svg {
+  width: 16px;
+  height: 16px;
+}
+
+.records-list {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.record-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+}
+
+.record-item:nth-child(odd) {
+  background: var(--bg-secondary);
+}
+
+.record-ip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text-primary);
+}
+
+.record-time {
+  color: var(--text-muted);
 }
 
 /* Mobile */

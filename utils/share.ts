@@ -1,3 +1,10 @@
+// 下载记录
+export interface DownloadRecord {
+  ip: string;
+  time: number;
+  userAgent?: string;
+}
+
 // 分享数据结构
 export interface ShareData {
   id: string;
@@ -12,6 +19,8 @@ export interface ShareData {
   maxDownloads?: number;    // 可选：最大下载次数
   downloads: number;        // 已下载次数
   createdBy: string;        // 创建者
+  trackDownloads?: boolean; // 可选：是否记录下载者 IP
+  downloadRecords?: DownloadRecord[]; // 下载记录
 }
 
 // 生成随机分享 ID

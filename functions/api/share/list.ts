@@ -85,6 +85,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             downloads: share.downloads,
             createdBy: share.createdBy,
             host: share.host || null,
+            downloadRecords: share.downloadRecords || [],
           });
         }
       } catch {
