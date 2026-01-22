@@ -18,6 +18,7 @@
       @showShareList="showShareListDialog = true"
       @showAdminTools="showAdminTools = true"
       @showApiKeys="showApiKeyDialog = true"
+      @showActivityLog="showActivityLog = true"
     />
 
     <!-- Main Content -->
@@ -310,7 +311,7 @@
     <Toast ref="toast" />
 
     <!-- Activity Log -->
-    <ActivityLog ref="activityLog" />
+    <ActivityLog ref="activityLog" v-model="showActivityLog" />
 
     <!-- File Preview -->
     <FilePreview
@@ -428,6 +429,9 @@ export default {
 
     // API Key Dialog
     showApiKeyDialog: false,
+
+    // Activity Log
+    showActivityLog: false,
 
     // Guest Upload Password
     guestUploadPassword: localStorage.getItem('guest_upload_password') || '',
