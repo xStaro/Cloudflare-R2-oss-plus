@@ -1142,13 +1142,33 @@ export default {
         } else {
           await axios.put(uploadUrl, file, { headers, onUploadProgress });
         }
+        // 上传成功提示
+        this.$refs.toast?.success(`"${file.name}" 上传成功`);
       } catch (error) {
-        // 如果是401错误，可能是密码错误，清除保存的密码
-        if (error.response?.status === 401 && this.currentUser?.isGuest) {
-          this.guestUploadPassword = '';
-          localStorage.removeItem('guest_upload_password');
-          this.$refs.toast?.error('上传密码错误，请重新输入');
+        const status = error.response?.status;
+        const fileName = file.name;
+
+        // 根据不同错误类型给出针对性提示
+        if (status === 401) {
+          if (this.currentUser?.isGuest) {
+            this.guestUploadPassword = '';
+            localStorage.removeItem('guest_upload_password');
+            this.$refs.toast?.error('上传密码错误');
+          } else {
+            this.$refs.toast?.error('登录已过期，请重新登录');
+          }
+        } else if (status === 403) {
+          this.$refs.toast?.error(`"${fileName}" 上传失败：没有写入权限`);
+        } else if (status === 413) {
+          this.$refs.toast?.error(`"${fileName}" 上传失败：文件超出大小限制`);
+        } else if (status === 507) {
+          this.$refs.toast?.error(`"${fileName}" 上传失败：存储空间不足`);
+        } else if (error.code === 'ERR_NETWORK' || !error.response) {
+          this.$refs.toast?.error(`"${fileName}" 上传失败：网络连接异常`);
+        } else {
+          this.$refs.toast?.error(`"${fileName}" 上传失败：${error.response?.data?.error || '服务器错误'}`);
         }
+
         fetch("/api/write/")
           .then((value) => {
             if (value.redirected) window.location.href = value.url;
