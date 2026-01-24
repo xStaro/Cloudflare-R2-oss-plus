@@ -282,8 +282,10 @@ export async function authenticateWithApiKey(kv: KVNamespace, key: string): Prom
   const apiKey = result.apiKey;
   const isAdmin = apiKey.permissions.includes('*');
 
-  // 异步更新最后使用时间（不等待）
-  updateApiKeyLastUsed(kv, apiKey.id).catch(() => {});
+  // 异步更新最后使用时间（不等待，但记录错误）
+  updateApiKeyLastUsed(kv, apiKey.id).catch((err) => {
+    console.error(`Failed to update API Key last used time (id: ${apiKey.id}):`, err);
+  });
 
   return {
     authenticated: true,

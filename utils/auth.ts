@@ -353,3 +353,46 @@ export function isAdminUser(context: any): boolean {
   const permissions = permStr.split(',').map((p: string) => p.trim());
   return permissions.includes('*');
 }
+
+// ==================== 管理员认证检查 ====================
+
+export interface AdminAuthResult {
+  isAdmin: boolean;
+  username: string;
+}
+
+/**
+ * 检查是否为管理员（支持 Basic Auth 和 API Key）
+ * 返回管理员状态和用户名
+ */
+export async function checkAdminAuth(context: any): Promise<AdminAuthResult> {
+  const headers = new Headers(context.request.headers);
+
+  // 1. 优先检查 API Key 认证
+  const apiKey = extractApiKeyFromHeaders(headers);
+  if (apiKey) {
+    const { authenticateWithApiKey } = await import('./apikey');
+    const result = await authenticateWithApiKey(context.env.ossShares, apiKey);
+    if (result.authenticated && result.isAdmin) {
+      return { isAdmin: true, username: result.username || '' };
+    }
+    return { isAdmin: false, username: '' };
+  }
+
+  // 2. 回退到 Basic Auth
+  const authHeader = headers.get('Authorization');
+  const credentials = decodeBasicAuth(authHeader || '');
+  if (!credentials) {
+    return { isAdmin: false, username: '' };
+  }
+
+  const userPerms = context.env[credentials.account];
+  if (!userPerms) {
+    return { isAdmin: false, username: '' };
+  }
+
+  const permissions = userPerms.split(',').map((p: string) => p.trim());
+  const isAdmin = permissions.includes('*');
+
+  return { isAdmin, username: credentials.username };
+}

@@ -1,49 +1,9 @@
-import { decodeBasicAuth } from "@/utils/auth";
-import {
-  getApiKeyById,
-  updateApiKey,
-  deleteApiKey,
-  extractApiKeyFromHeaders,
-  authenticateWithApiKey,
-} from "@/utils/apikey";
+import { checkAdminAuth } from "@/utils/auth";
+import { getApiKeyById, updateApiKey, deleteApiKey } from "@/utils/apikey";
 
 interface Env {
   ossShares: KVNamespace;
   [key: string]: any;
-}
-
-/**
- * 检查是否为管理员（支持 Basic Auth 和 API Key）
- */
-async function checkAdminAuth(context: any): Promise<{ isAdmin: boolean; username: string }> {
-  const headers = new Headers(context.request.headers);
-
-  // 1. 尝试 API Key 认证
-  const apiKey = extractApiKeyFromHeaders(headers);
-  if (apiKey) {
-    const result = await authenticateWithApiKey(context.env.ossShares, apiKey);
-    if (result.authenticated && result.isAdmin) {
-      return { isAdmin: true, username: result.username || '' };
-    }
-    return { isAdmin: false, username: '' };
-  }
-
-  // 2. 回退到 Basic Auth
-  const authHeader = headers.get('Authorization');
-  const credentials = decodeBasicAuth(authHeader || '');
-  if (!credentials) {
-    return { isAdmin: false, username: '' };
-  }
-
-  const userPerms = context.env[credentials.account];
-  if (!userPerms) {
-    return { isAdmin: false, username: '' };
-  }
-
-  const permissions = userPerms.split(',').map((p: string) => p.trim());
-  const isAdmin = permissions.includes('*');
-
-  return { isAdmin, username: credentials.username };
 }
 
 // GET - 获取单个 API Key 详情（仅管理员）

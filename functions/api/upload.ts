@@ -202,7 +202,9 @@ export async function onRequestPost(context: any) {
 
     // 更新 API Key 最后使用时间
     const { updateApiKeyLastUsed } = await import("@/utils/apikey");
-    updateApiKeyLastUsed(env.ossShares, result.apiKey.id).catch(() => {});
+    updateApiKeyLastUsed(env.ossShares, result.apiKey.id).catch((err) => {
+      console.error(`Failed to update API Key last used time (id: ${result.apiKey.id}):`, err);
+    });
 
     // 返回 PicGo 兼容的响应格式
     return new Response(JSON.stringify({
