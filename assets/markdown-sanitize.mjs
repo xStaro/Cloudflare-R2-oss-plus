@@ -19,20 +19,7 @@ export function sanitizeLinkHref(href) {
     return null;
   }
 
-  if (
-    lower.startsWith("http://") ||
-    lower.startsWith("https://") ||
-    lower.startsWith("mailto:") ||
-    lower.startsWith("tel:") ||
-    raw.startsWith("#") ||
-    raw.startsWith("/") ||
-    raw.startsWith("./") ||
-    raw.startsWith("../")
-  ) {
-    return raw;
-  }
-
-  return null;
+  return raw;
 }
 
 export function sanitizeImageSrc(src) {
@@ -47,17 +34,7 @@ export function sanitizeImageSrc(src) {
     return null;
   }
 
-  if (
-    lower.startsWith("http://") ||
-    lower.startsWith("https://") ||
-    raw.startsWith("/") ||
-    raw.startsWith("./") ||
-    raw.startsWith("../")
-  ) {
-    return raw;
-  }
-
-  return null;
+  return raw;
 }
 
 export function sanitizeHtmlFragment(html) {
