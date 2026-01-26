@@ -129,7 +129,7 @@ const emit = defineEmits(["update:modelValue", "upload", "createFolder"]);
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-  padding: 8px 16px 24px;
+  padding: 8px calc(16px + env(safe-area-inset-right, 0px)) 24px calc(16px + env(safe-area-inset-left, 0px));
 }
 
 .upload-option {
@@ -192,6 +192,15 @@ const emit = defineEmits(["update:modelValue", "upload", "createFolder"]);
   font-weight: 500;
   color: var(--text-primary, #1e293b);
   white-space: nowrap;
+}
+
+/* Small Mobile */
+@media (max-width: 480px) {
+  .popup .button-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 12px calc(20px + env(safe-area-inset-right, 0px)) 24px calc(20px + env(safe-area-inset-left, 0px));
+  }
 }
 
 /* Dark mode support */
