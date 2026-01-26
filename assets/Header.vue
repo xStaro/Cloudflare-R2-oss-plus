@@ -658,12 +658,16 @@ onUnmounted(() => {
 
   .user-dropdown {
     position: fixed;
-    left: 16px;
-    right: 16px;
+    left: calc(16px + env(safe-area-inset-left, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
     top: auto;
-    bottom: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     min-width: auto;
     border-radius: var(--radius-xl);
+    max-height: calc(100vh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   .search-wrapper {
