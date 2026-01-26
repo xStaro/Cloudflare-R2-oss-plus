@@ -703,8 +703,8 @@ img {
 /* ===== Upload Button ===== */
 .fab-button {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  right: calc(24px + env(safe-area-inset-right, 0px));
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -961,8 +961,13 @@ img {
     gap: 12px;
   }
 
-  .toolbar-left, .toolbar-right {
+  .toolbar-left {
     justify-content: space-between;
+  }
+
+  .toolbar-right {
+    justify-content: flex-end;
+    padding: 0 4px;
   }
 
   .file-grid {
@@ -1003,8 +1008,8 @@ img {
   }
 
   .fab-button {
-    right: 16px;
-    bottom: 16px;
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     width: 52px;
     height: 52px;
   }
