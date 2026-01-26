@@ -79,7 +79,7 @@ function loadScript(src) {
 
 function loadStyle(href) {
   return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`link[href="${href}"]`);
+    const existing = document.querySelector(`link[rel~="stylesheet"][href="${href}"]`);
     if (existing) {
       resolve();
       return;

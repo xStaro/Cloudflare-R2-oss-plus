@@ -286,7 +286,7 @@ const loadScript = (src) => {
 
 const loadStyle = (href) => {
   return new Promise((resolve, reject) => {
-    if (document.querySelector(`link[href="${href}"]`)) {
+    if (document.querySelector(`link[rel~="stylesheet"][href="${href}"]`)) {
       resolve();
       return;
     }
@@ -294,7 +294,7 @@ const loadStyle = (href) => {
     link.rel = 'stylesheet';
     link.href = href;
     link.onload = resolve;
-    link.onerror = reject;
+    link.onerror = () => reject(new Error(`样式加载失败：${href}`));
     document.head.appendChild(link);
   });
 };
