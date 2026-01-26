@@ -266,6 +266,7 @@
 
 <script>
 import { escapeHtml, sanitizeHtmlFragment, sanitizeImageSrc, sanitizeLinkHref } from "./markdown-sanitize.mjs";
+import { encodePathForUrl } from "./url-utils.mjs";
 
 // Library loading utilities
 const loadScript = (src) => {
@@ -686,27 +687,59 @@ export default {
       }
 
       safeRenderer.html = (html) => sanitizeHtmlFragment(html);
+
+      // URL Rewrite Logic
+      const currentDir = this.fileKey ? this.fileKey.split('/').slice(0, -1).join('/') : '';
+      const rewriteUrl = (href) => {
+        if (!href) return null;
+        // Absolute URLs or special protocols
+        if (/^(?:[a-z]+:)?\/\//i.test(href) || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) {
+          return href;
+        }
+        try {
+          const dummyBase = 'http://dummy.base/';
+          const baseDir = currentDir ? currentDir + '/' : '';
+          const url = new URL(href, dummyBase + baseDir);
+          const path = url.pathname.substring(1); // remove leading /
+          return `/raw/${encodePathForUrl(decodeURIComponent(path))}`;
+        } catch (e) {
+          return href;
+        }
+      };
+
       safeRenderer.link = (href, title, linkText) => {
         const safeHref = sanitizeLinkHref(href);
-        if (!safeHref) return linkText;
+        const finalHref = rewriteUrl(safeHref);
+        if (!finalHref) return linkText;
         const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
-        return `<a href="${escapeHtml(safeHref)}"${titleAttr}>${linkText}</a>`;
+        return `<a href="${escapeHtml(finalHref)}"${titleAttr}>${linkText}</a>`;
       };
+
       safeRenderer.image = (href, title, alt) => {
         const safeSrc = sanitizeImageSrc(href);
-        if (!safeSrc) return '';
+        const finalSrc = rewriteUrl(safeSrc);
+        if (!finalSrc) return '';
         const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
-        return `<img src="${escapeHtml(safeSrc)}" alt="${escapeHtml(alt)}"${titleAttr} />`;
+        return `<img src="${escapeHtml(finalSrc)}" alt="${escapeHtml(alt)}"${titleAttr} />`;
+      };
+
+      safeRenderer.code = (code, language) => {
+        const validLang = !!(language && window.hljs.getLanguage(language));
+        let highlighted;
+        try {
+           highlighted = validLang
+            ? window.hljs.highlight(code, { language }).value
+            : window.hljs.highlightAuto(code).value;
+        } catch (e) {
+           highlighted = escapeHtml(code);
+        }
+        
+        const langClass = language ? `language-${language}` : '';
+        return `<pre><code class="hljs ${langClass}">${highlighted}</code></pre>`;
       };
 
       window.marked.setOptions({
         renderer: safeRenderer,
-        highlight: (code, lang) => {
-          if (lang && window.hljs.getLanguage(lang)) {
-            return window.hljs.highlight(code, { language: lang }).value;
-          }
-          return window.hljs.highlightAuto(code).value;
-        },
         breaks: true,
         gfm: true
       });
@@ -1232,16 +1265,18 @@ export default {
   width: 100%;
   height: 100%;
   overflow: auto;
-  padding: 40px;
+  padding: 48px;
   background: var(--card-bg, #fff);
 }
 
 .markdown-body {
-  max-width: 900px;
+  max-width: 860px;
   margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   font-size: 16px;
-  line-height: 1.7;
-  color: var(--text-primary, #333);
+  line-height: 1.6;
+  color: var(--text-primary, #24292f);
+  word-wrap: break-word;
 }
 
 .markdown-body h1,
@@ -1256,77 +1291,127 @@ export default {
   line-height: 1.25;
 }
 
-.markdown-body h1 { font-size: 2em; border-bottom: 1px solid var(--border-color, #e5e5e5); padding-bottom: 0.3em; }
-.markdown-body h2 { font-size: 1.5em; border-bottom: 1px solid var(--border-color, #e5e5e5); padding-bottom: 0.3em; }
-.markdown-body h3 { font-size: 1.25em; }
+.markdown-body h1 {
+  font-size: 2em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border-color, #d0d7de);
+}
+
+.markdown-body h2 {
+  font-size: 1.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border-color, #d0d7de);
+}
+
+.markdown-body h3 {
+  font-size: 1.25em;
+}
+
+.markdown-body h4 {
+  font-size: 1em;
+}
 
 .markdown-body p {
+  margin-top: 0;
   margin-bottom: 16px;
-}
-
-.markdown-body code {
-  padding: 0.2em 0.4em;
-  background: var(--bg-secondary, #f5f5f5);
-  border-radius: 4px;
-  font-family: 'SFMono-Regular', Consolas, monospace;
-  font-size: 0.9em;
-}
-
-.markdown-body pre {
-  padding: 16px;
-  background: #1e1e1e;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin-bottom: 16px;
-}
-
-.markdown-body pre code {
-  padding: 0;
-  background: transparent;
-  color: #d4d4d4;
 }
 
 .markdown-body blockquote {
+  margin: 0 0 16px;
   padding: 0 1em;
-  border-left: 4px solid var(--primary-color, #f38020);
-  color: var(--text-secondary, #666);
-  margin: 0 0 16px 0;
+  color: var(--text-secondary, #57606a);
+  border-left: 0.25em solid var(--border-color, #d0d7de);
 }
 
 .markdown-body ul,
 .markdown-body ol {
-  padding-left: 2em;
+  margin-top: 0;
   margin-bottom: 16px;
+  padding-left: 2em;
 }
 
-.markdown-body li {
-  margin-bottom: 4px;
+.markdown-body ul li {
+  list-style-type: disc;
+}
+
+.markdown-body ul ul li {
+  list-style-type: circle;
+}
+
+.markdown-body ol li {
+  list-style-type: decimal;
 }
 
 .markdown-body table {
-  width: 100%;
+  border-spacing: 0;
   border-collapse: collapse;
+  margin-top: 0;
   margin-bottom: 16px;
+  width: 100%;
+  overflow: auto;
 }
 
-.markdown-body th,
-.markdown-body td {
-  padding: 8px 12px;
-  border: 1px solid var(--border-color, #e5e5e5);
+.markdown-body table th,
+.markdown-body table td {
+  padding: 6px 13px;
+  border: 1px solid var(--border-color, #d0d7de);
 }
 
-.markdown-body th {
-  background: var(--bg-secondary, #f5f5f5);
+.markdown-body table th {
   font-weight: 600;
+  background-color: var(--bg-secondary, #f6f8fa);
+}
+
+.markdown-body table tr {
+  background-color: var(--card-bg, #fff);
+  border-top: 1px solid var(--border-color, #c6cbd1);
+}
+
+.markdown-body table tr:nth-child(2n) {
+  background-color: var(--bg-secondary, #f6f8fa);
 }
 
 .markdown-body img {
   max-width: 100%;
-  border-radius: 4px;
+  box-sizing: content-box;
+  background-color: var(--card-bg, #fff);
+  border-radius: 6px;
+}
+
+.markdown-body code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: rgba(175, 184, 193, 0.2);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+}
+
+.markdown-body pre {
+  padding: 16px;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  background-color: #161b22;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.markdown-body pre code {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  line-height: inherit;
+  word-wrap: normal;
+  background-color: transparent;
+  border: 0;
+  font-size: 100%;
+  color: #e6edf3; 
 }
 
 .markdown-body a {
-  color: var(--primary-color, #f38020);
+  color: #0969da;
   text-decoration: none;
 }
 
@@ -1335,10 +1420,80 @@ export default {
 }
 
 .markdown-body hr {
-  border: none;
-  border-top: 1px solid var(--border-color, #e5e5e5);
+  height: 0.25em;
+  padding: 0;
   margin: 24px 0;
+  background-color: var(--border-color, #d0d7de);
+  border: 0;
 }
+
+/* Dark Theme Adjustments for Markdown */
+[data-theme="dark"] .markdown-body {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .markdown-body h1,
+[data-theme="dark"] .markdown-body h2 {
+  border-bottom-color: #30363d;
+}
+
+[data-theme="dark"] .markdown-body blockquote {
+  color: #8b949e;
+  border-left-color: #30363d;
+}
+
+[data-theme="dark"] .markdown-body table th,
+[data-theme="dark"] .markdown-body table td {
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .markdown-body table th {
+  background-color: #161b22;
+}
+
+[data-theme="dark"] .markdown-body table tr {
+  background-color: #0d1117;
+  border-top-color: #21262d;
+}
+
+[data-theme="dark"] .markdown-body table tr:nth-child(2n) {
+  background-color: #161b22;
+}
+
+[data-theme="dark"] .markdown-body code {
+  background-color: rgba(110, 118, 129, 0.4);
+}
+
+[data-theme="dark"] .markdown-body pre {
+  background-color: #161b22;
+}
+
+[data-theme="dark"] .markdown-body a {
+  color: #58a6ff;
+}
+
+[data-theme="dark"] .markdown-body hr {
+  background-color: #30363d;
+}
+
+[data-theme="dark"] .markdown-body img {
+  background-color: #0d1117;
+}
+
+/* Scrollbar styling for code blocks */
+.markdown-body pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+.markdown-body pre::-webkit-scrollbar-thumb {
+  background-color: rgba(175, 184, 193, 0.2);
+  border-radius: 4px;
+}
+
+[data-theme="dark"] .markdown-body pre::-webkit-scrollbar-thumb {
+  background-color: rgba(110, 118, 129, 0.4);
+}
+
 
 /* Excel Preview */
 .preview-excel-container {

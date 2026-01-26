@@ -117,34 +117,45 @@ function configureMarked() {
   }
 
   safeRenderer.html = (html) => sanitizeHtmlFragment(html);
-  safeRenderer.link = (href, title, linkText) => {
-    const safeHref = sanitizeLinkHref(href);
-    if (!safeHref) return linkText;
-    const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
-    return `<a href="${escapeAttr(safeHref)}"${titleAttr}>${linkText}</a>`;
-  };
-  safeRenderer.image = (href, title, alt) => {
-    const safeSrc = sanitizeImageSrc(href);
-    if (!safeSrc) return "";
-    const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
-    return `<img src="${escapeAttr(safeSrc)}" alt="${escapeAttr(alt)}"${titleAttr} />`;
-  };
 
-  window.marked.setOptions({
-    renderer: safeRenderer,
-    highlight: (code, lang) => {
-      if (lang && window.hljs.getLanguage(lang)) {
-        return window.hljs.highlight(code, { language: lang }).value;
-      }
-      return window.hljs.highlightAuto(code).value;
-    },
-    breaks: true,
-    gfm: true,
-  });
-
-  markedSafeMode = true;
-  markedConfigured = true;
+  // URL Rewrite Logic
+  // We need to access props.fileKey here, but configureMarked is outside setup.
+  // BUT we can get it from the outer scope if we were careful, but here props is inside setup.
+  // Since configureMarked is called once globally (singleton pattern for marked), we have a problem.
+  // Marked is a global singleton. We shouldn't rely on 'this.fileKey' inside the renderer if it's shared.
+  // Actually, marked is configured globally via setOptions.
+  // The renderer instance is reused? Or created once?
+  // We created 'safeRenderer' once and reused it.
+  
+  // To support dynamic base path based on current file, we should update the renderer hooks 
+  // right before parsing, OR pass context.
+  // Or simpler: don't use singleton configuration if we need dynamic context.
+  // But loading libs is async and we want to do it once.
+  
+  // Let's modify configureMarked to NOT set the renderer hooks permanently if they depend on context.
+  // OR, we can make the hooks access a current context variable.
+  
+  // Since we are in Vue script setup, props are available.
+  // But configureMarked is defined in script setup scope, so it closes over 'props' IF it's defined there.
+  // Yes, configureMarked is inside <script setup>, so it has access to 'props'.
+  // BUT 'markedConfigured' flag makes it run only once!
+  // If we open another file, props.fileKey changes, but configureMarked won't run again.
+  // This is a bug in the original code for single-page app if we want context-aware rendering.
+  
+  // Fix: Re-attach renderer hooks on every render or use a dynamic getter for currentDir.
 }
+// We will move the renderer setup INTO renderPreviewNow or similar, or make the hook dynamic.
+// Let's rewrite configureMarked to be setupMarked, and call it once to init libs, 
+// but attach renderer options every time we parse?
+// No, marked.setOptions is global.
+// We can use the 'walkTokens' or just override the renderer methods on the instance we pass to parse?
+// marked.parse(text, { renderer: customRenderer })
+// This is the best way.
+
+// Let's refactor to create a renderer per parse or update the global one's context.
+
+// For now, let's keep it simple and just update the global renderer's context-dependent functions.
+
 
 async function ensureMarkdownLibs() {
   libsError.value = "";
@@ -171,7 +182,67 @@ function renderPreviewNow() {
   }
 
   try {
-    renderedHtml.value = window.marked.parse(content.value || "");
+    // Create a fresh renderer for this parse to ensure context (fileKey) is correct
+    const safeRenderer = new window.marked.Renderer();
+    const escapeAttr = escapeHtml;
+
+    safeRenderer.html = (html) => sanitizeHtmlFragment(html);
+
+    const currentDir = props.fileKey ? props.fileKey.split('/').slice(0, -1).join('/') : '';
+    
+    const rewriteUrl = (href) => {
+        if (!href) return null;
+        if (/^(?:[a-z]+:)?\/\//i.test(href) || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) {
+          return href;
+        }
+        try {
+          const dummyBase = 'http://dummy.base/';
+          const baseDir = currentDir ? currentDir + '/' : '';
+          const url = new URL(href, dummyBase + baseDir);
+          const path = url.pathname.substring(1); 
+          return `/raw/${encodePathForUrl(decodeURIComponent(path))}`;
+        } catch (e) {
+          return href;
+        }
+    };
+
+    safeRenderer.link = (href, title, linkText) => {
+      const safeHref = sanitizeLinkHref(href);
+      const finalHref = rewriteUrl(safeHref);
+      if (!finalHref) return linkText;
+      const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
+      return `<a href="${escapeAttr(finalHref)}"${titleAttr}>${linkText}</a>`;
+    };
+
+    safeRenderer.image = (href, title, alt) => {
+      const safeSrc = sanitizeImageSrc(href);
+      const finalSrc = rewriteUrl(safeSrc);
+      if (!finalSrc) return "";
+      const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
+      return `<img src="${escapeAttr(finalSrc)}" alt="${escapeAttr(alt)}"${titleAttr} />`;
+    };
+
+    safeRenderer.code = (code, language) => {
+        const validLang = !!(language && window.hljs.getLanguage(language));
+        let highlighted;
+        try {
+           highlighted = validLang
+            ? window.hljs.highlight(code, { language }).value
+            : window.hljs.highlightAuto(code).value;
+        } catch (e) {
+           highlighted = escapeAttr(code);
+        }
+        
+        const langClass = language ? `language-${language}` : '';
+        return `<pre><code class="hljs ${langClass}">${highlighted}</code></pre>`;
+    };
+
+    // Use parse with the specific renderer
+    renderedHtml.value = window.marked.parse(content.value || "", { 
+      renderer: safeRenderer,
+      breaks: true,
+      gfm: true
+    });
   } catch (e) {
     renderedHtml.value = `<p>预览渲染失败：${String(e?.message || e)}</p>`;
   }
@@ -627,16 +698,18 @@ onBeforeUnmount(() => {
 
 .preview-pane {
   overflow: auto;
-  padding: 16px;
+  padding: 48px;
   background: var(--card-bg);
 }
 
 .markdown-body {
-  max-width: 900px;
+  max-width: 860px;
   margin: 0 auto;
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--text-primary, #333);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  word-wrap: break-word;
 }
 
 .markdown-body h1,
@@ -652,89 +725,126 @@ onBeforeUnmount(() => {
 }
 
 .markdown-body h1 {
-  font-size: 1.8em;
-  border-bottom: 1px solid var(--border-color, #e5e5e5);
+  font-size: 2em;
   padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .markdown-body h2 {
-  font-size: 1.4em;
-  border-bottom: 1px solid var(--border-color, #e5e5e5);
+  font-size: 1.5em;
   padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .markdown-body h3 {
-  font-size: 1.2em;
+  font-size: 1.25em;
+}
+
+.markdown-body h4 {
+  font-size: 1em;
 }
 
 .markdown-body p {
+  margin-top: 0;
   margin-bottom: 16px;
-}
-
-.markdown-body code {
-  padding: 0.2em 0.4em;
-  background: var(--bg-secondary, #f5f5f5);
-  border-radius: 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
-  font-size: 0.9em;
-}
-
-.markdown-body pre {
-  padding: 16px;
-  background: #1e1e1e;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin-bottom: 16px;
-}
-
-.markdown-body pre code {
-  padding: 0;
-  background: transparent;
-  color: #d4d4d4;
 }
 
 .markdown-body blockquote {
+  margin: 0 0 16px;
   padding: 0 1em;
-  border-left: 4px solid var(--primary-color, #f38020);
-  color: var(--text-secondary, #666);
-  margin: 0 0 16px 0;
+  color: var(--text-secondary);
+  border-left: 0.25em solid var(--border-color);
 }
 
 .markdown-body ul,
 .markdown-body ol {
-  padding-left: 2em;
+  margin-top: 0;
   margin-bottom: 16px;
+  padding-left: 2em;
 }
 
-.markdown-body li {
-  margin-bottom: 4px;
+.markdown-body ul li {
+  list-style-type: disc;
+}
+
+.markdown-body ul ul li {
+  list-style-type: circle;
+}
+
+.markdown-body ol li {
+  list-style-type: decimal;
 }
 
 .markdown-body table {
-  width: 100%;
+  border-spacing: 0;
   border-collapse: collapse;
+  margin-top: 0;
   margin-bottom: 16px;
+  width: 100%;
+  overflow: auto;
 }
 
-.markdown-body th,
-.markdown-body td {
-  padding: 8px 12px;
-  border: 1px solid var(--border-color, #e5e5e5);
+.markdown-body table th,
+.markdown-body table td {
+  padding: 6px 13px;
+  border: 1px solid var(--border-color);
 }
 
-.markdown-body th {
-  background: var(--bg-secondary, #f5f5f5);
+.markdown-body table th {
   font-weight: 600;
+  background-color: var(--bg-secondary);
+}
+
+.markdown-body table tr {
+  background-color: var(--card-bg);
+  border-top: 1px solid var(--border-color);
+}
+
+.markdown-body table tr:nth-child(2n) {
+  background-color: var(--bg-secondary);
 }
 
 .markdown-body img {
   max-width: 100%;
-  border-radius: 4px;
+  box-sizing: content-box;
+  background-color: var(--card-bg);
+  border-radius: 6px;
+}
+
+.markdown-body code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: rgba(175, 184, 193, 0.2);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+}
+
+.markdown-body pre {
+  padding: 16px;
+  overflow: auto;
+  font-size: 85%;
+  line-height: 1.45;
+  background-color: #161b22;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.markdown-body pre code {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  line-height: inherit;
+  word-wrap: normal;
+  background-color: transparent;
+  border: 0;
+  font-size: 100%;
+  color: #e6edf3;
 }
 
 .markdown-body a {
-  color: var(--primary-color, #f38020);
+  color: #0969da;
   text-decoration: none;
 }
 
@@ -743,13 +853,82 @@ onBeforeUnmount(() => {
 }
 
 .markdown-body hr {
-  border: none;
-  border-top: 1px solid var(--border-color, #e5e5e5);
+  height: 0.25em;
+  padding: 0;
   margin: 24px 0;
+  background-color: var(--border-color);
+  border: 0;
 }
 
 .markdown-body :deep(pre code.hljs) {
   background: transparent;
+}
+
+/* Dark Theme Adjustments for Markdown */
+[data-theme="dark"] .markdown-body {
+  color: #c9d1d9;
+}
+
+[data-theme="dark"] .markdown-body h1,
+[data-theme="dark"] .markdown-body h2 {
+  border-bottom-color: #30363d;
+}
+
+[data-theme="dark"] .markdown-body blockquote {
+  color: #8b949e;
+  border-left-color: #30363d;
+}
+
+[data-theme="dark"] .markdown-body table th,
+[data-theme="dark"] .markdown-body table td {
+  border-color: #30363d;
+}
+
+[data-theme="dark"] .markdown-body table th {
+  background-color: #161b22;
+}
+
+[data-theme="dark"] .markdown-body table tr {
+  background-color: #0d1117;
+  border-top-color: #21262d;
+}
+
+[data-theme="dark"] .markdown-body table tr:nth-child(2n) {
+  background-color: #161b22;
+}
+
+[data-theme="dark"] .markdown-body code {
+  background-color: rgba(110, 118, 129, 0.4);
+}
+
+[data-theme="dark"] .markdown-body pre {
+  background-color: #161b22;
+}
+
+[data-theme="dark"] .markdown-body a {
+  color: #58a6ff;
+}
+
+[data-theme="dark"] .markdown-body hr {
+  background-color: #30363d;
+}
+
+[data-theme="dark"] .markdown-body img {
+  background-color: #0d1117;
+}
+
+/* Scrollbar styling for code blocks */
+.markdown-body pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+.markdown-body pre::-webkit-scrollbar-thumb {
+  background-color: rgba(175, 184, 193, 0.2);
+  border-radius: 4px;
+}
+
+[data-theme="dark"] .markdown-body pre::-webkit-scrollbar-thumb {
+  background-color: rgba(110, 118, 129, 0.4);
 }
 
 .hint {
