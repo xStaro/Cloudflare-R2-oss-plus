@@ -667,7 +667,7 @@ onUnmounted(() => {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-    z-index: 1001;
+    z-index: 11000;
   }
 
   .search-wrapper {

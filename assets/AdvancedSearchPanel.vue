@@ -347,7 +347,7 @@ watch(() => props.show, (newVal) => {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  z-index: 1000;
+  z-index: 11000;
   overflow: hidden;
 }
 
