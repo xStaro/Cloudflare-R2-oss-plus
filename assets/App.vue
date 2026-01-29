@@ -19,6 +19,7 @@
       @showAdminTools="showAdminTools = true"
       @showApiKeys="showApiKeyDialog = true"
       @showActivityLog="showActivityLog = true"
+      @showUploadSettings="openUploadSettings"
     />
 
     <!-- Main Content -->
@@ -138,6 +139,58 @@
       @upload="onUploadClicked"
       @createFolder="createFolder"
     />
+
+    <!-- Upload Settings Dialog -->
+    <Dialog v-model="showUploadSettings">
+      <div class="upload-settings-dialog">
+        <div class="upload-settings-header">
+          <h3>上传参数</h3>
+          <p>提高并发与分片大小可加速上传，但弱网更容易失败</p>
+        </div>
+        <div class="upload-settings-body">
+          <label class="upload-settings-row">
+            <span>分片大小</span>
+            <select v-model.number="uploadSettingsDraft.chunkSizeMb" class="upload-settings-select">
+              <option :value="20">20MB</option>
+              <option :value="40">40MB</option>
+              <option :value="60">60MB</option>
+              <option :value="80">80MB</option>
+              <option :value="100">100MB</option>
+              <option :value="120">120MB</option>
+            </select>
+          </label>
+          <label class="upload-settings-row">
+            <span>并发数</span>
+            <select v-model.number="uploadSettingsDraft.concurrency" class="upload-settings-select">
+              <option :value="1">1</option>
+              <option :value="2">2</option>
+              <option :value="3">3</option>
+              <option :value="4">4</option>
+            </select>
+          </label>
+          <label class="upload-settings-row">
+            <span>重试次数</span>
+            <select v-model.number="uploadSettingsDraft.retries" class="upload-settings-select">
+              <option :value="0">0</option>
+              <option :value="1">1</option>
+              <option :value="2">2</option>
+              <option :value="3">3</option>
+              <option :value="4">4</option>
+              <option :value="5">5</option>
+            </select>
+          </label>
+        </div>
+        <div class="upload-settings-footer">
+          <button class="upload-settings-btn secondary" @click="resetUploadSettings">
+            恢复默认
+          </button>
+          <div class="upload-settings-actions">
+            <button class="upload-settings-btn ghost" @click="showUploadSettings = false">取消</button>
+            <button class="upload-settings-btn primary" @click="saveUploadSettings">保存</button>
+          </div>
+        </div>
+      </div>
+    </Dialog>
 
     <!-- Login Dialog -->
     <LoginDialog
@@ -408,6 +461,17 @@ export default {
     uploadProgress: null,
     uploadQueue: [],
     uploadResumeInfo: {},
+    uploadConfig: {
+      chunkSizeMb: 80,
+      concurrency: 3,
+      retries: 3,
+    },
+    showUploadSettings: false,
+    uploadSettingsDraft: {
+      chunkSizeMb: 80,
+      concurrency: 3,
+      retries: 3,
+    },
 
     // Auth
     showLoginDialog: false,
@@ -1130,7 +1194,10 @@ export default {
 
       const { basedir, file, resume: taskResume } = this.uploadQueue.pop(0);
       const uploadKey = this.getUploadResumeKey(file, basedir);
-      const resumeInfo = taskResume || this.uploadResumeInfo[uploadKey];
+      const chunkSizeBytes = this.getUploadChunkSizeBytes();
+      const resumeInfo = taskResume && taskResume.chunkSize === chunkSizeBytes
+        ? taskResume
+        : (this.uploadResumeInfo[uploadKey]?.chunkSize === chunkSizeBytes ? this.uploadResumeInfo[uploadKey] : null);
       let thumbnailDigest = null;
 
       if (file.type.startsWith("image/") || file.type === "video/mp4") {
@@ -1157,7 +1224,7 @@ export default {
       const logId = resumeInfo?.logId || this.$refs.activityLog?.add('upload', `上传 "${file.name}"`, 'pending');
       if (resumeInfo?.logId) {
         const doneParts = Array.isArray(resumeInfo.uploadedParts) ? resumeInfo.uploadedParts.length : 0;
-        const totalParts = resumeInfo.totalChunks || Math.ceil(file.size / SIZE_LIMIT);
+        const totalParts = resumeInfo.totalChunks || Math.ceil(file.size / chunkSizeBytes);
         this.$refs.activityLog?.update(logId, 'pending', `继续上传 "${file.name}" (${doneParts}/${totalParts})`);
       }
 
@@ -1174,12 +1241,14 @@ export default {
         if (this.currentUser?.isGuest && this.guestUploadPassword) {
           headers["X-Guest-Password"] = this.guestUploadPassword;
         }
-        if (file.size >= SIZE_LIMIT) {
+        if (file.size >= chunkSizeBytes) {
           await multipartUpload(`${basedir}${file.name}`, file, {
             headers,
             onUploadProgress,
-            retries: 3,
+            retries: this.uploadConfig.retries,
             retryDelayMs: 800,
+            concurrency: this.uploadConfig.concurrency,
+            chunkSize: chunkSizeBytes,
             resume: resumeInfo,
           });
         } else {
@@ -1194,12 +1263,13 @@ export default {
       } catch (error) {
         if (error?.isMultipartUpload) {
           const uploadedParts = Array.isArray(error.uploadedParts) ? error.uploadedParts : [];
-          const totalChunks = error.totalChunks || Math.ceil(file.size / SIZE_LIMIT);
+          const totalChunks = error.totalChunks || Math.ceil(file.size / chunkSizeBytes);
           this.uploadResumeInfo[uploadKey] = {
             uploadId: error.uploadId,
             uploadedParts,
             totalChunks,
             logId,
+            chunkSize: chunkSizeBytes,
           };
 
           const doneCount = uploadedParts.length;
@@ -1563,7 +1633,7 @@ export default {
       const uploadTasks = Array.from(files).map((file) => ({
         basedir: this.cwd,
         file,
-        resume: this.uploadResumeInfo[this.getUploadResumeKey(file, this.cwd)] || null,
+        resume: this.getResumeInfoForFile(file, this.cwd),
       }));
       this.uploadQueue.push(...uploadTasks);
       setTimeout(() => this.processUploadQueue());
@@ -1572,6 +1642,46 @@ export default {
     getUploadResumeKey(file, basedir) {
       const safeBase = basedir || '';
       return `${safeBase}${file.name}:${file.size}:${file.lastModified}`;
+    },
+
+    getUploadChunkSizeBytes() {
+      const size = Number(this.uploadConfig.chunkSizeMb) || 80;
+      return Math.max(20, size) * 1024 * 1024;
+    },
+
+    getResumeInfoForFile(file, basedir) {
+      const key = this.getUploadResumeKey(file, basedir);
+      const chunkSizeBytes = this.getUploadChunkSizeBytes();
+      const resumeInfo = this.uploadResumeInfo[key];
+      if (!resumeInfo || resumeInfo.chunkSize !== chunkSizeBytes) return null;
+      return resumeInfo;
+    },
+
+    updateUploadConfig(config) {
+      this.uploadConfig = this.normalizeUploadConfig({ ...this.uploadConfig, ...config });
+      localStorage.setItem('upload_config', JSON.stringify(this.uploadConfig));
+    },
+
+    normalizeUploadConfig(config) {
+      const chunkSizeMb = Math.min(120, Math.max(20, Number(config.chunkSizeMb) || 80));
+      const concurrency = Math.min(4, Math.max(1, Number(config.concurrency) || 3));
+      const retries = Math.min(5, Math.max(0, Number(config.retries) || 3));
+      return { chunkSizeMb, concurrency, retries };
+    },
+
+    openUploadSettings() {
+      this.uploadSettingsDraft = { ...this.uploadConfig };
+      this.showUploadSettings = true;
+    },
+
+    saveUploadSettings() {
+      this.updateUploadConfig(this.uploadSettingsDraft);
+      this.showUploadSettings = false;
+      this.$refs.toast?.success('上传参数已更新');
+    },
+
+    resetUploadSettings() {
+      this.uploadSettingsDraft = { chunkSizeMb: 80, concurrency: 3, retries: 3 };
     },
 
   },
@@ -1604,6 +1714,16 @@ export default {
 
     // Load config (file base URL for CDN)
     this.loadConfig();
+
+    const savedUploadConfig = localStorage.getItem('upload_config');
+    if (savedUploadConfig) {
+      try {
+        const parsed = JSON.parse(savedUploadConfig);
+        this.uploadConfig = this.normalizeUploadConfig({ ...this.uploadConfig, ...parsed });
+      } catch (error) {
+        console.log('Upload config parse failed');
+      }
+    }
 
     // Restore auth state, show login if not restored
     const restored = this.restoreAuth();
@@ -1696,6 +1816,132 @@ export default {
 
 .context-menu-item.danger {
   color: var(--error-color);
+}
+
+/* Upload Settings Dialog */
+.upload-settings-dialog {
+  width: min(520px, 100%);
+  background: var(--card-bg);
+}
+
+.upload-settings-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--divider-color);
+}
+
+.upload-settings-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.upload-settings-header p {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.upload-settings-body {
+  padding: 20px 24px;
+  display: grid;
+  gap: 14px;
+}
+
+.upload-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.upload-settings-select {
+  min-width: 140px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.upload-settings-footer {
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--divider-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.upload-settings-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.upload-settings-btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  transition: var(--transition);
+}
+
+.upload-settings-btn.primary {
+  background: var(--primary-gradient);
+  color: white;
+}
+
+.upload-settings-btn.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.upload-settings-btn.secondary {
+  background: var(--hover-bg);
+  color: var(--text-secondary);
+}
+
+.upload-settings-btn.secondary:hover {
+  background: var(--bg-secondary);
+}
+
+.upload-settings-btn.ghost {
+  color: var(--text-secondary);
+}
+
+.upload-settings-btn.ghost:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+@media (max-width: 640px) {
+  .upload-settings-header,
+  .upload-settings-body,
+  .upload-settings-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .upload-settings-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .upload-settings-select {
+    width: 100%;
+  }
+
+  .upload-settings-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .upload-settings-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
 .context-menu-item svg {
