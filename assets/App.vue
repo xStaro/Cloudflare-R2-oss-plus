@@ -407,6 +407,7 @@ export default {
     showUploadPopup: false,
     uploadProgress: null,
     uploadQueue: [],
+    uploadResumeInfo: {},
 
     // Auth
     showLoginDialog: false,
@@ -1127,7 +1128,9 @@ export default {
         return;
       }
 
-      const { basedir, file } = this.uploadQueue.pop(0);
+      const { basedir, file, resume: taskResume } = this.uploadQueue.pop(0);
+      const uploadKey = this.getUploadResumeKey(file, basedir);
+      const resumeInfo = taskResume || this.uploadResumeInfo[uploadKey];
       let thumbnailDigest = null;
 
       if (file.type.startsWith("image/") || file.type === "video/mp4") {
@@ -1151,7 +1154,12 @@ export default {
       }
 
       // 添加上传日志（pending 状态）
-      const logId = this.$refs.activityLog?.add('upload', `上传 "${file.name}"`, 'pending');
+      const logId = resumeInfo?.logId || this.$refs.activityLog?.add('upload', `上传 "${file.name}"`, 'pending');
+      if (resumeInfo?.logId) {
+        const doneParts = Array.isArray(resumeInfo.uploadedParts) ? resumeInfo.uploadedParts.length : 0;
+        const totalParts = resumeInfo.totalChunks || Math.ceil(file.size / SIZE_LIMIT);
+        this.$refs.activityLog?.update(logId, 'pending', `继续上传 "${file.name}" (${doneParts}/${totalParts})`);
+      }
 
       try {
         const uploadUrl = this.getWriteItemUrl(`${basedir}${file.name}`);
@@ -1170,14 +1178,49 @@ export default {
           await multipartUpload(`${basedir}${file.name}`, file, {
             headers,
             onUploadProgress,
+            retries: 3,
+            retryDelayMs: 800,
+            resume: resumeInfo,
           });
         } else {
           await axios.put(uploadUrl, file, { headers, onUploadProgress });
+        }
+        if (this.uploadResumeInfo[uploadKey]) {
+          delete this.uploadResumeInfo[uploadKey];
         }
         // 上传成功
         this.$refs.activityLog?.update(logId, 'success', `上传 "${file.name}" 成功`);
         this.$refs.toast?.success(`"${file.name}" 上传成功`);
       } catch (error) {
+        if (error?.isMultipartUpload) {
+          const uploadedParts = Array.isArray(error.uploadedParts) ? error.uploadedParts : [];
+          const totalChunks = error.totalChunks || Math.ceil(file.size / SIZE_LIMIT);
+          this.uploadResumeInfo[uploadKey] = {
+            uploadId: error.uploadId,
+            uploadedParts,
+            totalChunks,
+            logId,
+          };
+
+          const doneCount = uploadedParts.length;
+          const message = `上传 "${file.name}" 失败：网络波动（已完成 ${doneCount}/${totalChunks}）`;
+          this.$refs.activityLog?.update(logId, 'error', message);
+          this.$refs.toast?.error(`"${file.name}" 上传中断，可续传`);
+
+          this.showConfirm({
+            title: '上传中断',
+            message: `"${file.name}" 已完成 ${doneCount}/${totalChunks}，是否继续上传？`,
+            confirmText: '继续上传',
+            cancelText: '稍后',
+            type: 'warning',
+            callback: () => {
+              this.uploadQueue.unshift({ basedir, file, resume: this.uploadResumeInfo[uploadKey] });
+              setTimeout(() => this.processUploadQueue());
+            }
+          });
+          setTimeout(this.processUploadQueue);
+          return;
+        }
         const status = error.response?.status;
         const fileName = file.name;
         let errorMsg = '';
@@ -1520,10 +1563,17 @@ export default {
       const uploadTasks = Array.from(files).map((file) => ({
         basedir: this.cwd,
         file,
+        resume: this.uploadResumeInfo[this.getUploadResumeKey(file, this.cwd)] || null,
       }));
       this.uploadQueue.push(...uploadTasks);
       setTimeout(() => this.processUploadQueue());
     },
+
+    getUploadResumeKey(file, basedir) {
+      const safeBase = basedir || '';
+      return `${safeBase}${file.name}:${file.size}:${file.lastModified}`;
+    },
+
   },
 
   watch: {
