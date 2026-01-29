@@ -53,7 +53,13 @@ export async function blobDigest(blob) {
   return digestHex;
 }
 
-export const SIZE_LIMIT = 100 * 1000 * 1000; // 100MB
+export const SIZE_LIMIT = 50 * 1000 * 1000; // 50MB
+const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_RETRY_DELAY_MS = 800;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * @param {string} key
@@ -63,41 +69,89 @@ export const SIZE_LIMIT = 100 * 1000 * 1000; // 100MB
 export async function multipartUpload(key, file, options) {
   const encodedKey = encodePathForUrl(key);
   const headers = options?.headers || {};
+  const maxRetries = Number.isFinite(options?.retries)
+    ? Math.max(0, options.retries)
+    : DEFAULT_MAX_RETRIES;
+  const retryDelayMs = Number.isFinite(options?.retryDelayMs)
+    ? Math.max(0, options.retryDelayMs)
+    : DEFAULT_RETRY_DELAY_MS;
   headers["content-type"] = file.type;
 
-  const uploadId = await axios
-    .post(`/api/write/items/${encodedKey}?uploads`, "", { headers })
-    .then((res) => res.data.uploadId);
+  const resumeUploadId = options?.resume?.uploadId;
+  const initialParts = Array.isArray(options?.resume?.uploadedParts)
+    ? options.resume.uploadedParts.slice()
+    : [];
+  const uploadId = resumeUploadId
+    ? resumeUploadId
+    : await axios
+        .post(`/api/write/items/${encodedKey}?uploads`, "", { headers })
+        .then((res) => res.data.uploadId);
   const totalChunks = Math.ceil(file.size / SIZE_LIMIT);
+  const uploadedParts = initialParts;
 
-  const promiseGenerator = function* () {
-    for (let i = 1; i <= totalChunks; i++) {
-      const chunk = file.slice((i - 1) * SIZE_LIMIT, i * SIZE_LIMIT);
-      const searchParams = new URLSearchParams({ partNumber: i, uploadId });
-      yield axios
-        .put(`/api/write/items/${encodedKey}?${searchParams}`, chunk, {
-          onUploadProgress(progressEvent) {
-            if (typeof options?.onUploadProgress !== "function") return;
-            options.onUploadProgress({
-              loaded: (i - 1) * SIZE_LIMIT + progressEvent.loaded,
-              total: file.size,
-            });
-          },
-        })
-        .then((res) => ({
-          partNumber: i,
-          etag: res.headers.etag,
-        }));
+  const uploadPartWithRetry = async (partNumber, chunk) => {
+    const searchParams = new URLSearchParams({ partNumber, uploadId });
+    let attempt = 0;
+    while (true) {
+      try {
+        const response = await axios.put(
+          `/api/write/items/${encodedKey}?${searchParams}`,
+          chunk,
+          {
+            headers,
+            onUploadProgress(progressEvent) {
+              if (typeof options?.onUploadProgress !== "function") return;
+              options.onUploadProgress({
+                loaded: (partNumber - 1) * SIZE_LIMIT + progressEvent.loaded,
+                total: file.size,
+              });
+            },
+          }
+        );
+        return {
+          partNumber,
+          etag: response.headers.etag,
+        };
+      } catch (error) {
+        error.partNumber = partNumber;
+        if (attempt >= maxRetries) throw error;
+        const jitter = Math.floor(Math.random() * 200);
+        const delay = retryDelayMs * Math.pow(2, attempt) + jitter;
+        attempt += 1;
+        await sleep(delay);
+      }
     }
   };
 
-  const uploadedParts = [];
+  const promiseGenerator = function* () {
+    for (let i = 1; i <= totalChunks; i++) {
+      if (uploadedParts[i - 1]) continue;
+      const chunk = file.slice((i - 1) * SIZE_LIMIT, i * SIZE_LIMIT);
+      yield uploadPartWithRetry(i, chunk);
+    }
+  };
+
   for (const part of promiseGenerator()) {
-    const { partNumber, etag } = await part;
-    uploadedParts[partNumber - 1] = { partNumber, etag };
+    try {
+      const { partNumber, etag } = await part;
+      uploadedParts[partNumber - 1] = { partNumber, etag };
+    } catch (error) {
+      const multipartError = new Error("Multipart upload failed");
+      multipartError.isMultipartUpload = true;
+      multipartError.partNumber = error?.partNumber;
+      multipartError.uploadId = uploadId;
+      multipartError.uploadedParts = uploadedParts.filter(Boolean);
+      multipartError.totalChunks = totalChunks;
+      multipartError.cause = error;
+      throw multipartError;
+    }
   }
   const completeParams = new URLSearchParams({ uploadId });
-  await axios.post(`/api/write/items/${encodedKey}?${completeParams}`, {
-    parts: uploadedParts,
-  });
+  await axios.post(
+    `/api/write/items/${encodedKey}?${completeParams}`,
+    {
+      parts: uploadedParts,
+    },
+    { headers }
+  );
 }
