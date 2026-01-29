@@ -339,6 +339,8 @@ watch(() => props.show, (newVal) => {
   top: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
   width: 420px;
   max-width: 90vw;
   background: var(--card-bg);
@@ -394,6 +396,8 @@ watch(() => props.show, (newVal) => {
   padding: 16px;
   max-height: 400px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .form-group {
@@ -600,22 +604,23 @@ watch(() => props.show, (newVal) => {
 }
 
 /* 移动端适配 */
-@media (max-width: 480px) {
+@media (max-width: 640px) {
   .search-panel {
     position: fixed;
-    top: auto;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    top: calc(var(--header-height) + 12px + env(safe-area-inset-top, 0px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px));
     transform: none;
-    width: 100%;
-    max-width: 100%;
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    max-height: 80vh;
+    width: auto;
+    max-width: none;
+    border-radius: var(--radius-xl);
   }
 
   .panel-body {
-    max-height: 60vh;
+    flex: 1;
+    min-height: 0;
+    max-height: none;
   }
 
   .type-grid {

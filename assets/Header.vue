@@ -660,14 +660,14 @@ onUnmounted(() => {
     position: fixed;
     left: calc(16px + env(safe-area-inset-left, 0px));
     right: calc(16px + env(safe-area-inset-right, 0px));
-    top: auto;
+    top: calc(var(--header-height) + 12px + env(safe-area-inset-top, 0px));
     bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     min-width: auto;
     border-radius: var(--radius-xl);
-    max-height: calc(100vh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-    overflow: auto;
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+    z-index: 1001;
   }
 
   .search-wrapper {
