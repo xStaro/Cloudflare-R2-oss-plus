@@ -1,4 +1,5 @@
 import { S3BucketAdapter } from "@/utils/s3-bucket";
+import { OneDriveBucketAdapter } from "@/utils/onedrive-bucket";
 import { loadStorageConfig, normalizeDriveId } from "@/utils/storage-config";
 
 export function notFound() {
@@ -121,6 +122,12 @@ export async function parseBucketPath(context): Promise<[any, string]> {
       const bucketCandidate = env[bindingName];
       if (isBucketLike(bucketCandidate)) return [bucketCandidate, path];
       throw new Error(`Drive ${driveid} R2 绑定未配置：${bindingName}`);
+    }
+
+    if (kvDrive.backend === "onedrive") {
+      const oneDriveConfig = kvDrive.onedrive;
+      if (!oneDriveConfig) throw new Error(`Drive ${driveid} OneDrive 配置缺失`);
+      return [new OneDriveBucketAdapter(oneDriveConfig), path];
     }
   }
 

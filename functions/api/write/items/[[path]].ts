@@ -16,6 +16,8 @@ export async function onRequestPostCreateMultipart(context) {
       contentType: request.headers.get("content-type"),
     },
     customMetadata,
+    contentLength: Number(request.headers.get("x-fd-total-size") || 0) || undefined,
+    chunkSize: Number(request.headers.get("x-fd-chunk-size") || 0) || undefined,
   });
 
   return new Response(
@@ -33,6 +35,12 @@ export async function onRequestPostCompleteMultipart(context) {
   const request: Request = context.request;
   const url = new URL(request.url);
   const uploadId = new URLSearchParams(url.search).get("uploadId");
+  if (!uploadId) {
+    return new Response(JSON.stringify({ error: "缺少 uploadId" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   const multipartUpload = await bucket.resumeMultipartUpload(path, uploadId);
 
   const completeBody: { parts: Array<any> } = await request.json();
@@ -78,11 +86,23 @@ export async function onRequestPutMultipart(context) {
   const url = new URL(request.url);
 
   const uploadId = new URLSearchParams(url.search).get("uploadId");
+  if (!uploadId) {
+    return new Response(JSON.stringify({ error: "缺少 uploadId" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   const multipartUpload = await bucket.resumeMultipartUpload(path, uploadId);
 
   const partNumber = parseInt(
     new URLSearchParams(url.search).get("partNumber")
   );
+  if (!Number.isFinite(partNumber) || partNumber <= 0) {
+    return new Response(JSON.stringify({ error: "partNumber 不合法" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   const uploadedPart = await multipartUpload.uploadPart(
     partNumber,
     request.body
@@ -155,8 +175,17 @@ export async function onRequestPut(context) {
     if (contentType) httpMetadata = { contentType };
   }
 
-  const putOptions: { customMetadata: Record<string, string>; httpMetadata?: R2HTTPMetadata } = { customMetadata };
+  const contentLengthHeader = request.headers.get("content-length");
+  const putOptions: {
+    customMetadata: Record<string, string>;
+    httpMetadata?: R2HTTPMetadata;
+    contentLength?: number;
+  } = { customMetadata };
   if (httpMetadata) putOptions.httpMetadata = httpMetadata;
+  if (contentLengthHeader) {
+    const parsedLength = Number(contentLengthHeader);
+    if (Number.isFinite(parsedLength)) putOptions.contentLength = parsedLength;
+  }
 
   const obj = await bucket.put(path, content, putOptions);
   const { key, size, uploaded } = obj;

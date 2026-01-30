@@ -91,7 +91,13 @@ export async function multipartUpload(key, file, options) {
   const uploadId = resumeUploadId
     ? resumeUploadId
     : await axios
-        .post(`/api/write/items/${encodedKey}?uploads`, "", { headers })
+        .post(`/api/write/items/${encodedKey}?uploads`, "", {
+          headers: {
+            ...headers,
+            "x-fd-chunk-size": String(chunkSize),
+            "x-fd-total-size": String(file.size),
+          },
+        })
         .then((res) => res.data.uploadId);
   const totalChunks = Math.ceil(file.size / chunkSize);
   const uploadedParts = initialParts;

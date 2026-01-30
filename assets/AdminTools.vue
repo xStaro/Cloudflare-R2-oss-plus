@@ -221,6 +221,7 @@
                       <select v-model="drive.backend">
                         <option value="s3">S3（兼容各类 S3 网盘）</option>
                         <option value="r2">R2（使用绑定）</option>
+                        <option value="onedrive">OneDrive（Graph API）</option>
                       </select>
                     </div>
                     <div class="form-group" v-if="drive.backend === 'r2'">
@@ -263,6 +264,48 @@
                       <input type="checkbox" v-model="drive.s3.forcePathStyle" />
                       强制 Path-style（推荐；如提供商要求虚拟主机风格可取消）
                     </label>
+                  </div>
+
+                  <div v-if="drive.backend === 'onedrive'" class="s3-settings">
+                    <div class="drive-grid">
+                      <div class="form-group">
+                        <label>Tenant ID（可选，默认 common）</label>
+                        <input v-model="drive.onedrive.tenantId" placeholder="common" />
+                      </div>
+                      <div class="form-group">
+                        <label>Drive ID（可选，默认 me/drive）</label>
+                        <input v-model="drive.onedrive.driveId" placeholder="留空=当前用户驱动器" />
+                      </div>
+                      <div class="form-group">
+                        <label>Root Path（可选）</label>
+                        <input v-model="drive.onedrive.rootPath" placeholder="例如：Apps/StaroDrive" />
+                      </div>
+                      <div class="form-group">
+                        <label>分片大小（字节，可选）</label>
+                        <input v-model.number="drive.onedrive.chunkSize" placeholder="例如：10485760" />
+                      </div>
+                      <div class="form-group">
+                        <label>Client ID（留空=保留已有）</label>
+                        <input v-model="drive.onedrive.clientId" placeholder="留空=保留已有" />
+                        <div v-if="drive.onedrive.clientIdPreview" class="field-hint">
+                          当前：<code>{{ drive.onedrive.clientIdPreview }}</code>
+                        </div>
+                      </div>
+                      <div class="form-group">
+                        <label>Client Secret（留空=保留已有）</label>
+                        <input type="password" v-model="drive.onedrive.clientSecret" placeholder="留空=保留已有" />
+                        <div v-if="drive.onedrive.hasClientSecret" class="field-hint">
+                          当前：<code>已设置</code>
+                        </div>
+                      </div>
+                      <div class="form-group">
+                        <label>Refresh Token（留空=保留已有）</label>
+                        <input type="password" v-model="drive.onedrive.refreshToken" placeholder="留空=保留已有" />
+                        <div v-if="drive.onedrive.hasRefreshToken" class="field-hint">
+                          当前：<code>已设置</code>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -347,11 +390,23 @@ export default {
           accessKeyIdPreview: '',
           hasSecretAccessKey: false,
         },
+        onedrive: {
+          tenantId: 'common',
+          driveId: '',
+          rootPath: '',
+          chunkSize: null,
+          clientId: '',
+          clientSecret: '',
+          refreshToken: '',
+          clientIdPreview: '',
+          hasClientSecret: false,
+          hasRefreshToken: false,
+        },
       };
     },
 
     normalizeStorageDriveFromApi(drive) {
-      const backend = drive?.backend === 'r2' ? 'r2' : 's3';
+      const backend = drive?.backend === 'onedrive' ? 'onedrive' : drive?.backend === 'r2' ? 'r2' : 's3';
       const base = {
         id: drive?.id || '',
         name: drive?.name || '',
@@ -367,9 +422,29 @@ export default {
           accessKeyIdPreview: drive?.s3?.accessKeyIdPreview || '',
           hasSecretAccessKey: !!drive?.s3?.hasSecretAccessKey,
         },
+        onedrive: {
+          tenantId: drive?.onedrive?.tenantId || 'common',
+          driveId: drive?.onedrive?.driveId || '',
+          rootPath: drive?.onedrive?.rootPath || '',
+          chunkSize: drive?.onedrive?.chunkSize || null,
+          clientId: '',
+          clientSecret: '',
+          refreshToken: '',
+          clientIdPreview: drive?.onedrive?.clientIdPreview || '',
+          hasClientSecret: !!drive?.onedrive?.hasClientSecret,
+          hasRefreshToken: !!drive?.onedrive?.hasRefreshToken,
+        },
       };
 
       if (backend === 'r2') {
+        base.s3 = this.createEmptyStorageDrive().s3;
+      }
+
+      if (backend === 's3') {
+        base.onedrive = this.createEmptyStorageDrive().onedrive;
+      }
+
+      if (backend === 'onedrive') {
         base.s3 = this.createEmptyStorageDrive().s3;
       }
 
@@ -437,6 +512,15 @@ export default {
               accessKeyId: d.s3.accessKeyId,
               secretAccessKey: d.s3.secretAccessKey,
               forcePathStyle: d.s3.forcePathStyle,
+            } : undefined,
+            onedrive: d.backend === 'onedrive' ? {
+              tenantId: d.onedrive.tenantId,
+              driveId: d.onedrive.driveId,
+              rootPath: d.onedrive.rootPath,
+              chunkSize: d.onedrive.chunkSize,
+              clientId: d.onedrive.clientId,
+              clientSecret: d.onedrive.clientSecret,
+              refreshToken: d.onedrive.refreshToken,
             } : undefined,
           }))
         };

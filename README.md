@@ -231,6 +231,20 @@ PUBURL = https://pub-xxx.r2.dev
 > - 只要 `S3_ENDPOINT`、`S3_BUCKET` 与凭据齐全，后端会自动走 S3；此时 `BUCKET`/`PUBURL` 不再是核心必需（仍可保留用于 R2 模式或其他功能）。
 > - `/raw/...` 会走服务端签名直读，并对非缩略图响应设置 `Cache-Control: no-store`，避免“保存后仍看到旧内容”。
 
+---
+
+## ✅ OneDrive 存储支持（配置化）
+
+在后台的 **管理工具 → 存储后端配置** 中添加 Drive，选择后端类型为 **OneDrive**，填写以下字段：
+
+- `Client ID` / `Client Secret` / `Refresh Token`
+- `Tenant ID`（可选，默认 `common`）
+- `Drive ID`（可选，留空默认 `me/drive`）
+- `Root Path`（可选，指定 OneDrive 中的根目录，如 `Apps/StaroDrive`）
+- `分片大小`（可选，建议 10MB；会自动对齐 320KB）
+
+> 提示：OneDrive 走 Microsoft Graph API，密钥不会回显，留空表示保留已有配置。
+
 #### FILE_BASE_URL（可选）
 
 前端文件访问的基础 URL。用于 CDN 回源场景，如果不配置则使用 Pages Function 代理。

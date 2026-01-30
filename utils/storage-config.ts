@@ -1,4 +1,4 @@
-export type StorageBackendType = "s3" | "r2";
+export type StorageBackendType = "s3" | "r2" | "onedrive";
 
 export type StorageS3Config = {
   endpoint: string;
@@ -9,12 +9,23 @@ export type StorageS3Config = {
   forcePathStyle: boolean;
 };
 
+export type StorageOneDriveConfig = {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+  tenantId?: string;
+  driveId?: string;
+  rootPath?: string;
+  chunkSize?: number;
+};
+
 export type StorageDriveConfig = {
   id: string;
   name?: string;
   backend: StorageBackendType;
   r2Binding?: string;
   s3?: StorageS3Config;
+  onedrive?: StorageOneDriveConfig;
 };
 
 export type StorageConfigV1 = {
@@ -32,12 +43,23 @@ export type StorageS3ConfigPublic = {
   hasSecretAccessKey: boolean;
 };
 
+export type StorageOneDriveConfigPublic = {
+  tenantId?: string;
+  driveId?: string;
+  rootPath?: string;
+  chunkSize?: number;
+  clientIdPreview: string;
+  hasClientSecret: boolean;
+  hasRefreshToken: boolean;
+};
+
 export type StorageDriveConfigPublic = {
   id: string;
   name?: string;
   backend: StorageBackendType;
   r2Binding?: string;
   s3?: StorageS3ConfigPublic;
+  onedrive?: StorageOneDriveConfigPublic;
 };
 
 export type StorageConfigPublicV1 = {
@@ -64,6 +86,18 @@ function readString(value: unknown): string {
 function readBoolean(value: unknown): boolean | undefined {
   if (typeof value === "boolean") return value;
   return undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return undefined;
+}
+
+function normalizeRootPath(value: unknown): string {
+  const raw = readString(value)
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+  return raw;
 }
 
 export function normalizeDriveId(value: unknown): string {
@@ -136,6 +170,23 @@ export function toPublicStorageConfig(config: StorageConfigV1 | null): StorageCo
       };
     }
 
+    if (backend === "onedrive" && drive.onedrive) {
+      return {
+        id,
+        name,
+        backend,
+        onedrive: {
+          tenantId: readString(drive.onedrive.tenantId) || undefined,
+          driveId: readString(drive.onedrive.driveId) || undefined,
+          rootPath: normalizeRootPath(drive.onedrive.rootPath) || undefined,
+          chunkSize: readNumber(drive.onedrive.chunkSize),
+          clientIdPreview: maskSecret(readString(drive.onedrive.clientId)),
+          hasClientSecret: !!readString(drive.onedrive.clientSecret),
+          hasRefreshToken: !!readString(drive.onedrive.refreshToken),
+        },
+      };
+    }
+
     return {
       id,
       name,
@@ -183,7 +234,7 @@ export function validateAndNormalizeStorageConfigInput(
     seen.add(id);
 
     const backend = readString(driveRaw.backend) as StorageBackendType;
-    if (backend !== "s3" && backend !== "r2") {
+    if (backend !== "s3" && backend !== "r2" && backend !== "onedrive") {
       throw new Error(`Drive ${id} 后端类型不合法：${readString(driveRaw.backend)}`);
     }
 
@@ -197,6 +248,41 @@ export function validateAndNormalizeStorageConfigInput(
         name,
         backend,
         r2Binding: r2Binding || undefined,
+      });
+      continue;
+    }
+
+    if (backend === "onedrive") {
+      const onedriveRaw = driveRaw.onedrive || {};
+      const existingOneDrive = existingDrive?.backend === "onedrive" ? existingDrive.onedrive : undefined;
+
+      const clientId = readString(onedriveRaw.clientId) || readString(existingOneDrive?.clientId);
+      if (!clientId) throw new Error(`Drive ${id} 缺少 OneDrive Client ID`);
+
+      const clientSecret = readString(onedriveRaw.clientSecret) || readString(existingOneDrive?.clientSecret);
+      if (!clientSecret) throw new Error(`Drive ${id} 缺少 OneDrive Client Secret`);
+
+      const refreshToken = readString(onedriveRaw.refreshToken) || readString(existingOneDrive?.refreshToken);
+      if (!refreshToken) throw new Error(`Drive ${id} 缺少 OneDrive Refresh Token`);
+
+      const tenantId = readString(onedriveRaw.tenantId) || readString(existingOneDrive?.tenantId) || "common";
+      const driveId = readString(onedriveRaw.driveId) || readString(existingOneDrive?.driveId) || "";
+      const rootPath = normalizeRootPath(onedriveRaw.rootPath) || normalizeRootPath(existingOneDrive?.rootPath) || "";
+      const chunkSize = readNumber(onedriveRaw.chunkSize) ?? readNumber(existingOneDrive?.chunkSize);
+
+      drives.push({
+        id,
+        name,
+        backend,
+        onedrive: {
+          clientId,
+          clientSecret,
+          refreshToken,
+          tenantId,
+          driveId: driveId || undefined,
+          rootPath: rootPath || undefined,
+          chunkSize,
+        },
       });
       continue;
     }
