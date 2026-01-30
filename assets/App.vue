@@ -1231,8 +1231,35 @@ export default {
       try {
         const uploadUrl = this.getWriteItemUrl(`${basedir}${file.name}`);
         const headers = {};
+        let multipartProgress = null;
+        if (file.size >= chunkSizeBytes) {
+          const totalChunks = Math.ceil(file.size / chunkSizeBytes);
+          const partLoaded = {};
+          if (resumeInfo?.uploadedParts?.length) {
+            for (const part of resumeInfo.uploadedParts) {
+              const partSize = this.getMultipartPartSize(
+                part.partNumber,
+                totalChunks,
+                chunkSizeBytes,
+                file.size
+              );
+              partLoaded[part.partNumber] = partSize;
+            }
+          }
+          multipartProgress = { partLoaded, totalChunks };
+        }
         const onUploadProgress = (progressEvent) => {
-          var percentCompleted =
+          if (multipartProgress && progressEvent.partNumber) {
+            multipartProgress.partLoaded[progressEvent.partNumber] = progressEvent.partLoaded;
+            const loaded = Object.values(multipartProgress.partLoaded).reduce(
+              (sum, value) => sum + value,
+              0
+            );
+            const percentCompleted = (loaded * 100) / progressEvent.total;
+            this.uploadProgress = Math.min(100, Math.max(0, percentCompleted));
+            return;
+          }
+          const percentCompleted =
             (progressEvent.loaded * 100) / progressEvent.total;
           this.uploadProgress = percentCompleted;
         };
@@ -1647,6 +1674,13 @@ export default {
     getUploadChunkSizeBytes() {
       const size = Number(this.uploadConfig.chunkSizeMb) || 80;
       return Math.max(20, size) * 1024 * 1024;
+    },
+
+    getMultipartPartSize(partNumber, totalChunks, chunkSize, fileSize) {
+      if (partNumber === totalChunks) {
+        return fileSize - chunkSize * (totalChunks - 1);
+      }
+      return chunkSize;
     },
 
     getResumeInfoForFile(file, basedir) {

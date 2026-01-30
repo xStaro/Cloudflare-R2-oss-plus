@@ -111,6 +111,9 @@ export async function multipartUpload(key, file, options) {
               options.onUploadProgress({
                 loaded: (partNumber - 1) * chunkSize + progressEvent.loaded,
                 total: file.size,
+                partNumber,
+                partLoaded: progressEvent.loaded,
+                partSize: chunk.size,
               });
             },
           }
